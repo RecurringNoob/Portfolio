@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Info, ChevronLeft, ChevronRight, Search, Bell, User, Code } from 'lucide-react';
+import { Play, Info, ChevronLeft, ChevronRight, Search, Bell, User, Code,Brain} from 'lucide-react';
 
 const Home = () => {
   const [selectedProfile, setSelectedProfile] = useState(null);
@@ -14,7 +14,8 @@ const Home = () => {
 
   const profiles = {
     personal: { name: "Personal", color: "bg-blue-500", icon: User },
-    fullstack: { name: "Fullstack", color: "bg-red-600", icon: Code }
+    fullstack: { name: "Fullstack", color: "bg-red-600", icon: Code },
+    aiml: { name: "AI/ML", color: "bg-green-500", icon: Brain }
   };
 
   const ProfileSelection = () => (

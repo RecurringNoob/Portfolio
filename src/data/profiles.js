@@ -82,8 +82,8 @@ export const profiles = {
             image: "https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&q=80", // University campus/learning environment
             technologies: ["CS Fundamentals", "DSA", "OS", "DBMS", "ML", "Networks"],
             match: "100% Match",
-            year: "2021-2025",
-            rating: "A+",
+            year: "2023-2027",
+            rating: "",
             duration: "4 Years",
             role: "Student",
             difficulty: "Academic",
@@ -96,12 +96,7 @@ export const profiles = {
               {
                 title: "Core Curriculum",
                 duration: "3 Years",
-                desc: "Completed courses in Data Structures, Algorithms, OS, DBMS, Computer Networks, and System Design."
-              },
-              {
-                title: "Machine Learning",
-                duration: "1 Semester",
-                desc: "Studied supervised/unsupervised learning, neural networks, and deep learning fundamentals."
+                desc: "Completed courses in Data Structures, Algorithms, OS, DBMS, Computer Networks."
               },
               {
                 title: "Academic Projects",
@@ -110,42 +105,6 @@ export const profiles = {
               }
             ]
           },
-          {
-            id: 'p-edu-2',
-            title: "Relevant Certifications & Courses",
-            description: "Completed industry-recognized certifications and online courses to supplement academic learning. Focused on modern web technologies, cloud computing, and AI/ML specializations.",
-            category: "Certifications",
-            image: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&q=80", // Online learning/certificates
-            technologies: ["AWS", "React", "Python", "Machine Learning", "Docker"],
-            match: "96% Match",
-            year: "2022-2024",
-            rating: "Certified",
-            duration: "2 Years",
-            role: "Learner",
-            difficulty: "Professional",
-            tags: ["Continuous Learning", "Certifications", "Upskilling"],
-            links: {
-              demo: "#",
-              code: "#"
-            },
-            features: [
-              {
-                title: "Web Development",
-                duration: "6 Months",
-                desc: "Completed advanced React, Node.js, and full-stack development courses."
-              },
-              {
-                title: "Cloud & DevOps",
-                duration: "3 Months",
-                desc: "AWS certifications and Docker containerization training."
-              },
-              {
-                title: "AI/ML Specialization",
-                duration: "4 Months",
-                desc: "Deep learning, NLP, and computer vision courses from Coursera."
-              }
-            ]
-          }
         ]
       },
       {
@@ -153,13 +112,13 @@ export const profiles = {
         projects: [
           {
             id: 'p-extra-1',
-            title: "ACM Student Chapter - Technical Lead",
+            title: "ACM Student Chapter - Web Development Lead",
             description: "Led the university's ACM chapter organizing hackathons, coding competitions, and technical workshops. Mentored 50+ junior students in web development and competitive programming. Managed a team of 20 volunteers.",
             category: "Leadership",
             image: "https://images.unsplash.com/photo-1528605105345-5344ea20e269?w=800&q=80", // Presentation/workshop environment
             technologies: ["Leadership", "Event Management", "Public Speaking", "Mentorship"],
             match: "98% Match",
-            year: "2023-2024",
+            year: "",
             rating: "Leadership",
             duration: "1 Year",
             role: "Technical Lead",
@@ -172,83 +131,26 @@ export const profiles = {
             features: [
               {
                 title: "Hackathon Organization",
-                duration: "3 Events",
-                desc: "Organized and managed 3 major 24-hour hackathons with 200+ participants."
+                duration: "",
+                desc: "Organized and managed  major hackathons ."
               },
               {
                 title: "Workshop Series",
-                duration: "10 Sessions",
-                desc: "Conducted workshops on React, Python, Git, and competitive programming."
+                duration: "",
+                desc: "Conducted workshops "
               },
               {
                 title: "Mentorship Program",
-                duration: "Year-round",
-                desc: "Mentored 50+ juniors through one-on-one sessions and group workshops."
+                duration: "",
+                desc: "Mentored juniors through one-on-one sessions and group workshops."
+              },
+              {
+                title:"Website",
+                duration:"",
+                desc: "Deployed and Maintained the Club Website"
               }
             ]
           },
-          {
-            id: 'p-extra-2',
-            title: "Open Source Contributor",
-            description: "Active contributor to open source projects in the React and Python ecosystems. Contributed bug fixes, documentation improvements, and new features to popular libraries. Building a strong GitHub presence.",
-            category: "Community",
-            image: "https://images.unsplash.com/photo-1618401471353-b98afee0b2eb?w=800&q=80", // GitHub/code collaboration
-            technologies: ["Git", "GitHub", "Open Source", "Collaboration"],
-            match: "90% Match",
-            year: "2023-2024",
-            rating: "Community",
-            duration: "Ongoing",
-            role: "Contributor",
-            difficulty: "Collaborative",
-            tags: ["Open Source", "Git", "Community Building"],
-            links: {
-              demo: "#",
-              code: "#"
-            },
-            features: [
-              {
-                title: "Code Contributions",
-                duration: "Ongoing",
-                desc: "Submitted 20+ pull requests to various open source projects."
-              },
-              {
-                title: "Documentation",
-                duration: "Ongoing",
-                desc: "Improved README files and added missing API documentation for several libraries."
-              }
-            ]
-          },
-          {
-            id: 'p-extra-3',
-            title: "Technical Blogging & Content Creation",
-            description: "Maintain a technical blog sharing tutorials, project breakdowns, and learning experiences. Write about web development, AI/ML, and software engineering best practices. Growing audience of 500+ regular readers.",
-            category: "Content Creation",
-            image: "https://images.unsplash.com/photo-1488190211105-8b0e65b80b4e?w=800&q=80", // Writing/blogging setup
-            technologies: ["Writing", "Technical Documentation", "Teaching"],
-            match: "88% Match",
-            year: "2023-2024",
-            rating: "Creator",
-            duration: "Ongoing",
-            role: "Blogger",
-            difficulty: "Creative",
-            tags: ["Writing", "Teaching", "Knowledge Sharing"],
-            links: {
-              demo: "#",
-              code: "#"
-            },
-            features: [
-              {
-                title: "Tutorial Series",
-                duration: "Ongoing",
-                desc: "Published 30+ in-depth tutorials on React, WebRTC, and ML topics."
-              },
-              {
-                title: "Project Showcases",
-                duration: "Monthly",
-                desc: "Detailed breakdowns of personal projects with code walkthroughs."
-              }
-            ]
-          }
         ]
       }
     ]
