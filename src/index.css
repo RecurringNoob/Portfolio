@@ -1,17 +1,23 @@
 @import "tailwindcss";
-@keyframes slow-zoom {
-  from { transform: scale(1); }
-  to { transform: scale(1.1); }
+
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }
 
-.animate-slow-zoom {
-  animation: slow-zoom 20s infinite alternate ease-in-out;
+body {
+  margin: 0;
+  background-color: #141414;
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
-.bg-radial-vignette {
-  background: radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.4) 100%);
-}
-
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
+::selection {
+  background: #E50914;
+  color: white;
 }

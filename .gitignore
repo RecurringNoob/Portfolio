@@ -22,3 +22,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+src/pages/ProjectDetails.jsx
+src/components/ProfileSelection.jsx

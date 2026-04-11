@@ -1,9 +1,15 @@
-// src/components/ProjectModal.jsx
-import React from 'react';
-import { AnimatePresence,motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import { X, Play, Plus, ThumbsUp } from 'lucide-react';
 
-const ProjectModal = ({ project, onClose, onPlay }) => {
+export default function ProjectModal({ project, onClose }) {
+  const navigate = useNavigate();
+
+  const handlePlay = () => {
+    navigate(`/project/${project.id}`);
+    onClose();
+  };
+
   return (
     <AnimatePresence>
       {project && (
@@ -32,7 +38,7 @@ const ProjectModal = ({ project, onClose, onPlay }) => {
 
             <div className="relative h-64 md:h-96">
               <img
-                src={project.image || "https://via.placeholder.com/800"}
+                src={project.image}
                 className="w-full h-full object-cover"
                 alt={project.title}
               />
@@ -44,7 +50,10 @@ const ProjectModal = ({ project, onClose, onPlay }) => {
                 </h2>
 
                 <div className="flex gap-2">
-                  <button className="bg-white text-black px-6 py-2 rounded-md font-bold flex items-center gap-2 hover:bg-white/90" onClick={onPlay}>
+                  <button
+                    onClick={handlePlay}
+                    className="bg-white text-black px-6 py-2 rounded-md font-bold flex items-center gap-2 hover:bg-white/90"
+                  >
                     <Play fill="black" size={20} /> Play
                   </button>
                   <button className="p-2 border border-gray-500 rounded-full text-white hover:border-white">
@@ -60,27 +69,24 @@ const ProjectModal = ({ project, onClose, onPlay }) => {
             <div className="p-6 md:p-8 grid md:grid-cols-3 gap-6 text-white">
               <div className="md:col-span-2 space-y-3">
                 <div className="flex items-center gap-2 mb-2">
-                   <span className="text-green-400 font-bold">{project.match || "98% Match"}</span>
-                   <span className="text-gray-400">{project.year || "2024"}</span>
-                   <span className="border border-gray-500 px-1 text-xs rounded">{project.rating || "HD"}</span>
+                  <span className="text-green-400 font-bold">{project.match || '98% Match'}</span>
+                  <span className="text-gray-400">{project.year || '2024'}</span>
+                  <span className="border border-gray-500 px-1 text-xs rounded">
+                    {project.rating || 'HD'}
+                  </span>
                 </div>
-                <p className="text-gray-300 text-sm leading-relaxed">
-                  {project.description}
-                </p>
+                <p className="text-gray-300 text-sm leading-relaxed">{project.description}</p>
               </div>
 
               <div className="text-sm space-y-2 text-gray-300">
                 <p>
-                  <span className="text-gray-500">Tech:</span>{' '}
-                  {project.technologies.join(', ')}
+                  <span className="text-gray-500">Tech:</span> {project.technologies.join(', ')}
                 </p>
                 <p>
-                  <span className="text-gray-500">Category:</span>{' '}
-                  {project.category}
+                  <span className="text-gray-500">Category:</span> {project.category}
                 </p>
                 <p>
-                  <span className="text-gray-500">Role:</span>{' '}
-                  {project.role || "Developer"}
+                  <span className="text-gray-500">Role:</span> {project.role || 'Developer'}
                 </p>
               </div>
             </div>
@@ -89,6 +95,4 @@ const ProjectModal = ({ project, onClose, onPlay }) => {
       )}
     </AnimatePresence>
   );
-};
-
-export default ProjectModal;
+}
