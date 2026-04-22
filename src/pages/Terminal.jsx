@@ -1,569 +1,681 @@
-import React, { useState, useEffect, useRef } from "react";
-import { profiles } from "../data/profiles"; // Import profiles data
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { profiles } from "../data/profiles";
+import { useNavigate } from "react-router-dom";
 
+/* ─────────────────────────────────────────────
+   Cinematic Terminal — drop-in replacement
+   Paste this file over src/components/Terminal.jsx
+───────────────────────────────────────────── */
+
+/* ── Inline styles (no Tailwind dependency for the terminal shell) ── */
+const S = {
+  overlay: {
+    position: "fixed", inset: 0, zIndex: 50,
+    background: "#080810",
+    display: "flex", flexDirection: "column",
+    fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+    overflow: "hidden",
+  },
+  /* Scanline texture */
+  scanlines: {
+    position: "absolute", inset: 0, zIndex: 20, pointerEvents: "none",
+    background:
+      "repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.13) 3px, rgba(0,0,0,0.13) 4px)",
+  },
+  /* Vignette */
+  vignette: {
+    position: "absolute", inset: 0, zIndex: 19, pointerEvents: "none",
+    background:
+      "radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.72) 100%)",
+  },
+  /* Top red accent line */
+  redLine: {
+    position: "absolute", top: 0, left: 0, right: 0, height: 2, zIndex: 21,
+    background:
+      "linear-gradient(90deg, transparent 0%, #E50914 20%, #ff1a1a 50%, #E50914 80%, transparent 100%)",
+    boxShadow: "0 0 18px 6px rgba(229,9,20,0.55)",
+  },
+  /* Title bar */
+  titleBar: {
+    display: "flex", alignItems: "center", justifyContent: "space-between",
+    padding: "14px 24px 10px",
+    borderBottom: "1px solid rgba(229,9,20,0.15)",
+    background: "rgba(229,9,20,0.04)",
+    flexShrink: 0, position: "relative", zIndex: 5,
+  },
+  brand: { display: "flex", alignItems: "center", gap: 12 },
+  dots:  { display: "flex", gap: 7 },
+  dot:   { width: 12, height: 12, borderRadius: "50%", cursor: "pointer", transition: "filter 0.2s" },
+  dotR:  { background: "#E50914", boxShadow: "0 0 7px rgba(229,9,20,0.8)" },
+  dotY:  { background: "#f0a500", boxShadow: "0 0 7px rgba(240,165,0,0.5)" },
+  dotG:  { background: "#3fb950", boxShadow: "0 0 7px rgba(63,185,80,0.5)" },
+  titleText: {
+    fontSize: 10, letterSpacing: "0.3em",
+    color: "rgba(229,9,20,0.8)", textTransform: "uppercase", fontWeight: 500,
+  },
+  closeBtn: {
+    background: "none", border: "1px solid rgba(229,9,20,0.3)",
+    color: "rgba(229,9,20,0.7)", fontFamily: "inherit", fontSize: 9,
+    letterSpacing: "0.2em", padding: "4px 12px", borderRadius: 3,
+    cursor: "pointer", textTransform: "uppercase", transition: "all 0.2s",
+  },
+  /* Scrollable body */
+  body: {
+    flex: 1, overflowY: "auto", padding: "16px 28px 8px",
+    position: "relative", zIndex: 5,
+    scrollbarWidth: "thin", scrollbarColor: "rgba(229,9,20,0.2) transparent",
+  },
+  /* ASCII banner */
+  ascii: {
+    color: "rgba(229,9,20,0.65)", fontSize: 11, lineHeight: 1.3,
+    marginBottom: 12, display: "block", whiteSpace: "pre",
+    userSelect: "none",
+  },
+  /* History lines */
+  lineBase: { fontSize: 13, lineHeight: 1.75, display: "block" },
+  lineInput:  { color: "#46d369" },
+  lineOutput: { color: "rgba(200,200,215,0.9)" },
+  lineError:  { color: "#E50914" },
+  lineSystem: { color: "rgba(229,9,20,0.55)", fontStyle: "italic" },
+  /* Prompt row */
+  promptRow: {
+    display: "flex", alignItems: "center",
+    padding: "8px 28px",
+    borderTop: "1px solid rgba(229,9,20,0.1)",
+    background: "rgba(229,9,20,0.025)",
+    flexShrink: 0, position: "relative", zIndex: 5,
+  },
+  promptSymbol: {
+    color: "#E50914", fontSize: 14, fontWeight: 700,
+    marginRight: 12, userSelect: "none",
+    textShadow: "0 0 10px rgba(229,9,20,0.9)",
+  },
+  promptInput: {
+    flex: 1, background: "transparent", border: "none", outline: "none",
+    color: "#e8e8f0", fontFamily: "inherit", fontSize: 13,
+    caretColor: "#E50914",
+  },
+  /* Status bar */
+  statusBar: {
+    padding: "5px 28px",
+    display: "flex", justifyContent: "space-between", alignItems: "center",
+    borderTop: "1px solid rgba(229,9,20,0.08)",
+    background: "rgba(0,0,0,0.45)",
+    flexShrink: 0, position: "relative", zIndex: 5,
+  },
+  statusTxt: {
+    fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase",
+    color: "rgba(150,150,165,0.45)",
+  },
+  statusDot: {
+    width: 5, height: 5, borderRadius: "50%",
+    background: "#46d369", boxShadow: "0 0 6px #46d369",
+  },
+};
+
+/* ── ASCII banner ── */
+const ASCII = `██████╗  ██████╗ ██████╗ ████████╗███████╗ ██████╗ ██╗     ██╗ ██████╗
+██╔══██╗██╔═══██╗██╔══██╗╚══██╔══╝██╔════╝██╔═══██╗██║     ██║██╔═══██╗
+██████╔╝██║   ██║██████╔╝   ██║   █████╗  ██║   ██║██║     ██║██║   ██║
+██╔═══╝ ██║   ██║██╔══██╗   ██║   ██╔══╝  ██║   ██║██║     ██║██║   ██║
+██║     ╚██████╔╝██║  ██║   ██║   ██║     ╚██████╔╝███████╗██║╚██████╔╝
+╚═╝      ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝      ╚═════╝ ╚══════╝╚═╝ ╚═════╝`;
+
+/* ── Keyframe injection (one-time) ── */
+const KEYFRAMES = `
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap');
+@keyframes termIn {
+  from { opacity:0; transform:scale(0.97) translateY(14px); filter:brightness(0.2); }
+  to   { opacity:1; transform:scale(1)    translateY(0);     filter:brightness(1); }
+}
+@keyframes redLinePulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
+@keyframes promptGlow   {
+  0%,100%{ text-shadow: 0 0 8px rgba(229,9,20,0.8); }
+  50%    { text-shadow: 0 0 20px rgba(229,9,20,1), 0 0 40px rgba(229,9,20,0.4); }
+}
+@keyframes statusBlink { 0%,100%{opacity:1} 50%{opacity:0.15} }
+@keyframes lineIn {
+  from { opacity:0; transform:translateX(-5px); }
+  to   { opacity:1; transform:translateX(0); }
+}
+.term-overlay-anim { animation: termIn 0.45s cubic-bezier(0.16,1,0.3,1) both; }
+.term-redline-anim { animation: redLinePulse 3s ease-in-out infinite; }
+.term-prompt-anim  { animation: promptGlow 2.2s ease-in-out infinite; }
+.term-blink-anim   { animation: statusBlink 1.4s step-end infinite; }
+.term-line-anim    { animation: lineIn 0.15s ease both; }
+.term-close-hover:hover { background:rgba(229,9,20,0.15) !important; color:#E50914 !important; border-color:#E50914 !important; }
+.term-dot-hover:hover   { filter: brightness(1.5) !important; }
+.term-body-scroll::-webkit-scrollbar        { width:3px; }
+.term-body-scroll::-webkit-scrollbar-thumb  { background:rgba(229,9,20,0.25); border-radius:2px; }
+`;
+
+function injectStyles() {
+  if (document.getElementById("term-cinematic-styles")) return;
+  const el = document.createElement("style");
+  el.id = "term-cinematic-styles";
+  el.textContent = KEYFRAMES;
+  document.head.appendChild(el);
+}
+
+/* ══════════════════════════════════════════════
+   Main Terminal Component
+══════════════════════════════════════════════ */
 export const Terminal = ({ onClose }) => {
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
+  const [cmdHistory, setCmdHistory] = useState([]); // arrow-key command history
+  const [historyIdx, setHistoryIdx] = useState(-1);
   const [history, setHistory] = useState([
-    { type: 'output', text: 'Welcome to Portfolio Terminal v2.0' },
-    { type: 'output', text: 'Type "help" for available commands' },
-    { type: 'output', text: '' },
+    { type: "system", text: "Welcome to Portfolio Terminal v2.0" },
+    { type: "system", text: 'Type "help" for available commands' },
+    { type: "empty" },
   ]);
-  const terminalRef = useRef(null);
-  const inputRef = useRef(null);
-  const [customScripts, ] = useState({
-    random: {
-      description: 'Show a random project from all profiles',
-      fn: function(sandbox) {
-        const allProjects = [];
-        Object.values(sandbox.profiles).forEach(profile => {
-          profile.sections.forEach(section => {
-            section.projects.forEach(project => {
-              allProjects.push({
-                ...project,
-                profileName: profile.name,
-                sectionName: section.title
-              });
-            });
-          });
-        });
-        
-        if (allProjects.length === 0) {
-          return ['No projects available'];
-        }
 
-        const randomProject = allProjects[Math.floor(Math.random() * allProjects.length)];
+  const navigate = useNavigate();
+  const bodyRef  = useRef(null);
+  const inputRef = useRef(null);
+
+  /* Inject font + keyframes once */
+  useEffect(() => { injectStyles(); }, []);
+
+  /* Auto-scroll */
+  useEffect(() => {
+    if (bodyRef.current)
+      bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+  }, [history]);
+
+  /* Focus on mount */
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  /* ── Custom scripts ── */
+  const customScripts = {
+    random: {
+      description: "Show a random project from all profiles",
+      fn(sandbox) {
+        const all = [];
+        Object.values(sandbox.profiles).forEach((p) =>
+          p.sections.forEach((s) =>
+            s.projects.forEach((pr) =>
+              all.push({ ...pr, profileName: p.name, sectionName: s.title })
+            )
+          )
+        );
+        if (!all.length) return ["No projects available"];
+        const r = all[Math.floor(Math.random() * all.length)];
         return [
-          '🎲 Random Project:',
-          '',
-          randomProject.title,
-          `Profile: ${randomProject.profileName}`,
-          `Section: ${randomProject.sectionName}`,
-          '',
-          randomProject.description,
-          '',
-          `Use "project ${randomProject.id}" for full details`,
+          "🎲 Random Project:",
+          "",
+          r.title,
+          `Profile : ${r.profileName}`,
+          `Section : ${r.sectionName}`,
+          "",
+          r.description,
+          "",
+          `Use "project ${r.id}" for full details`,
         ];
-      }
+      },
     },
     techstack: {
-      description: 'Show technology breakdown across all profiles',
-      fn: function(sandbox) {
-        const techCount = {};
-        Object.values(sandbox.profiles).forEach(profile => {
-          profile.sections.forEach(section => {
-            section.projects.forEach(project => {
-              project.technologies.forEach(tech => {
-                techCount[tech] = (techCount[tech] || 0) + 1;
-              });
-            });
-          });
-        });
-
-        const sorted = Object.entries(techCount)
+      description: "Technology breakdown across all profiles",
+      fn(sandbox) {
+        const cnt = {};
+        Object.values(sandbox.profiles).forEach((p) =>
+          p.sections.forEach((s) =>
+            s.projects.forEach((pr) =>
+              pr.technologies.forEach((t) => (cnt[t] = (cnt[t] || 0) + 1))
+            )
+          )
+        );
+        const sorted = Object.entries(cnt)
           .sort((a, b) => b[1] - a[1])
           .slice(0, 10);
-
-        const output = ['Top 10 Technologies (All Profiles):', ''];
+        const maxCount = sorted[0]?.[1] || 1;
+        const out = ["Top 10 Technologies:", ""];
         sorted.forEach(([tech, count], i) => {
-          const bar = '█'.repeat(Math.ceil(count / 2));
-          output.push(`  ${(i + 1).toString().padStart(2)}. ${tech.padEnd(20)} ${bar} (${count})`);
+          const bar = "█".repeat(Math.round((count / maxCount) * 20));
+          out.push(
+            `  ${String(i + 1).padStart(2)}. ${tech.padEnd(22)} ${bar} (${count})`
+          );
         });
+        return out;
+      },
+    },
+  };
 
-        return output;
-      }
-    }
-  });
-
-  // Get all profiles data
-  const allProfiles = profiles;
-
-  // Safe script execution sandbox
-  const executeSafeScript = (scriptFn, args = []) => {
+  const executeSafeScript = (fn, args = []) => {
     try {
-      // Create a sandboxed context with limited access
       const sandbox = {
-        // Safe utilities
-        console: {
-          log: (...msgs) => msgs.map(m => String(m)),
-        },
-        Math: Math,
-        Date: Date,
-        JSON: JSON,
-        // All profiles data (read-only)
-        profiles: JSON.parse(JSON.stringify(allProfiles)),
-        // Arguments
-        args: args,
+        console: { log: (...msgs) => msgs.map(String) },
+        Math, Date, JSON,
+        profiles: JSON.parse(JSON.stringify(profiles)),
+        args,
       };
-
-      // Execute script in sandboxed context
-      const result = scriptFn.call(sandbox, sandbox);
+      const result = fn.call(sandbox, sandbox);
       return Array.isArray(result) ? result : [String(result)];
-    } catch (error) {
-      return [`Error executing script: ${error.message}`];
+    } catch (e) {
+      return [`Script error: ${e.message}`];
     }
   };
 
-  // Register a custom script (safe API)
-
-  // Built-in commands
+  /* ── Built-in commands ── */
   const commands = {
     help: () => {
-      const builtInCommands = [
-        'Available commands:',
-        '  help         - Show this help message',
-        '  about        - About me',
-        '  skills       - List ALL skills across profiles',
-        '  projects     - List ALL projects across all profiles',
-        '  project <id> - View specific project details',
-        '  work         - Show work experience',
-        '  education    - Show education',
-        '  resume       - Display resume summary',
-        '  download     - Download PDF resume',
-        '  contact      - Contact information',
-        '  search <term>- Search projects by keyword',
-        '  stats        - Show portfolio statistics',
-        '  clear        - Clear terminal',
-        '  gui          - Switch to GUI mode',
+      const base = [
+        "Available commands:",
+        "",
+        "  help           Show this message",
+        "  about          About me",
+        "  skills         All technologies across profiles",
+        "  projects       All projects across profiles",
+        "  project <id>   View project by ID",
+        "  work           Work experience",
+        "  education      Education history",
+        "  resume         Full resume summary",
+        "  download       Download PDF resume",
+        "  contact        Contact information",
+        "  search <kw>    Full-text project search",
+        "  stats          Portfolio statistics",
+        "  clear          Clear terminal",
+        "  gui            Return to GUI mode",
       ];
-
-      const customCommands = Object.keys(customScripts).length > 0 
-        ? [
-            '',
-            'Custom Scripts:',
-            ...Object.entries(customScripts).map(([name, { description }]) => 
-              `  ${name.padEnd(12)} - ${description}`
-            )
-          ]
-        : [];
-
-      return [...builtInCommands, ...customCommands];
+      const scripts =
+        Object.keys(customScripts).length > 0
+          ? [
+              "",
+              "Custom Scripts:",
+              ...Object.entries(customScripts).map(
+                ([name, { description }]) =>
+                  `  ${name.padEnd(14)} ${description}`
+              ),
+            ]
+          : [];
+      return [...base, ...scripts];
     },
 
-    about: () => {
-      return [
-        'Full Stack Developer & AI/ML Engineer',
-        '',
-        'Passionate about building innovative solutions spanning web development,',
-        'artificial intelligence, and real-time systems. From pixel-perfect UIs to',
-        'scalable microservices, from NLP models to computer vision applications.',
-        '',
-        'This terminal provides access to all my work across different domains.',
-      ];
-    },
+    about: () => [
+      "Full Stack Developer & AI/ML Engineer",
+      "",
+      "Passionate about building innovative solutions spanning web development,",
+      "artificial intelligence, and real-time systems. From pixel-perfect UIs to",
+      "scalable microservices, from NLP models to computer vision applications.",
+      "",
+      "This terminal provides access to all my work across different domains.",
+    ],
 
     skills: () => {
-      const allTechs = new Set();
-      
-      // Aggregate technologies from ALL profiles
-      Object.values(allProfiles).forEach(profile => {
-        profile.sections.forEach(section => {
-          section.projects.forEach(project => {
-            project.technologies.forEach(tech => allTechs.add(tech));
-          });
-        });
-      });
-
-      const techList = Array.from(allTechs).sort();
+      const all = new Set();
+      Object.values(profiles).forEach((p) =>
+        p.sections.forEach((s) =>
+          s.projects.forEach((pr) => pr.technologies.forEach((t) => all.add(t)))
+        )
+      );
+      const list = [...all].sort();
       return [
-        'Technical Skills (All Domains):',
-        '',
-        ...techList.map((tech, i) => 
-          `  ${(i + 1).toString().padStart(2)}. ${tech}`
-        ),
-        '',
-        `Total: ${techList.length} technologies`,
+        "Technical Skills (All Domains):",
+        "",
+        ...list.map((t, i) => `  ${String(i + 1).padStart(2)}. ${t}`),
+        "",
+        `Total: ${list.length} technologies`,
       ];
     },
 
     projects: () => {
-      const output = ['ALL Projects Across All Profiles:', ''];
-      
-      // Iterate through ALL profiles
-      Object.entries(allProfiles).forEach(([, profile]) => {
-        output.push(`━━━━━ ${profile.name} ━━━━━`);
-        output.push('');
-        
-        profile.sections.forEach(section => {
-          output.push(`--- ${section.title} ---`);
-          section.projects.forEach((project, i) => {
-            output.push(
-              `  ${i + 1}. ${project.title}`,
-              `     ID: ${project.id} | ${project.category} | ${project.year}`,
-              ''
-            );
-          });
+      const out = ["All Projects:", ""];
+      Object.entries(profiles).forEach(([, p]) => {
+        out.push(`── ${p.name} ──`, "");
+        p.sections.forEach((s) => {
+          out.push(`  ${s.title}`);
+          s.projects.forEach((pr) =>
+            out.push(`    • ${pr.title.padEnd(30)} [${pr.id}]`)
+          );
+          out.push("");
         });
-        output.push('');
       });
-      
-      output.push('Use "project <id>" to view details');
-      return output;
+      out.push('Use "project <id>" for details');
+      return out;
     },
 
     project: (args) => {
       const id = args[0];
-      if (!id) return ['Usage: project <id>', 'Example: project p-work-1'];
-
-      let foundProject = null;
-      let sectionTitle = '';
-      let profileName = '';
-
-      // Search across ALL profiles
-      Object.values(allProfiles).forEach(profile => {
-        profile.sections.forEach(section => {
-          const project = section.projects.find(p => p.id === id);
-          if (project) {
-            foundProject = project;
-            sectionTitle = section.title;
-            profileName = profile.name;
-          }
-        });
-      });
-
-      if (!foundProject) {
-        return [`Project "${id}" not found`, 'Use "projects" to see all available projects'];
-      }
-
-      const output = [
-        `=== ${foundProject.title} ===`,
-        '',
-        `Profile: ${profileName}`,
-        `Section: ${sectionTitle}`,
-        `Category: ${foundProject.category}`,
-        `Year: ${foundProject.year}`,
-        `Duration: ${foundProject.duration}`,
-        `Match: ${foundProject.match}`,
-        '',
-        'Description:',
-        foundProject.description,
-        '',
-        'Technologies:',
-        ...foundProject.technologies.map(tech => `  • ${tech}`),
+      if (!id) return ["Usage: project <id>", "Example: project p-work-1"];
+      let found = null, sName = "", pName = "";
+      Object.values(profiles).forEach((p) =>
+        p.sections.forEach((s) => {
+          const pr = s.projects.find((x) => x.id === id);
+          if (pr) { found = pr; sName = s.title; pName = p.name; }
+        })
+      );
+      if (!found)
+        return [`Project "${id}" not found`, 'Use "projects" to see all IDs'];
+      const out = [
+        `=== ${found.title} ===`, "",
+        `Profile  : ${pName}`,
+        `Section  : ${sName}`,
+        `Category : ${found.category}`,
+        `Year     : ${found.year}`,
+        `Duration : ${found.duration}`,
+        `Match    : ${found.match}`,
+        "", "Description:", found.description,
+        "", "Technologies:",
+        ...found.technologies.map((t) => `  • ${t}`),
       ];
-
-      if (foundProject.features && foundProject.features.length > 0) {
-        output.push('', 'Key Features:');
-        foundProject.features.forEach((feature, i) => {
-          output.push(
-            `  ${i + 1}. ${feature.title} (${feature.duration})`,
-            `     ${feature.desc}`,
-            ''
-          );
-        });
+      if (found.features?.length) {
+        out.push("", "Key Features:");
+        found.features.forEach((f, i) =>
+          out.push(`  ${i + 1}. ${f.title} (${f.duration})`, `     ${f.desc}`, "")
+        );
       }
-
-      if (foundProject.tags) {
-        output.push('Tags: ' + foundProject.tags.join(', '));
-      }
-
-      return output;
+      if (found.tags?.length) out.push("Tags: " + found.tags.join(", "));
+      return out;
     },
 
     work: () => {
-      const output = ['=== Work Experience (All Profiles) ===', ''];
-      
-      Object.values(allProfiles).forEach(profile => {
-        const workSection = profile.sections.find(s => 
-          s.title.toLowerCase().includes('work') || 
-          s.title.toLowerCase().includes('experience')
+      const out = ["Work Experience:", ""];
+      Object.values(profiles).forEach((p) => {
+        const s = p.sections.find(
+          (x) =>
+            x.title.toLowerCase().includes("work") ||
+            x.title.toLowerCase().includes("experience")
         );
-
-        if (workSection) {
-          output.push(`--- ${profile.name} ---`);
-          workSection.projects.forEach((project, i) => {
-            output.push(
-              `${i + 1}. ${project.title}`,
-              `   ${project.year} | ${project.duration}`,
-              `   ${project.description.substring(0, 100)}...`,
-              ''
-            );
+        if (s) {
+          out.push(`── ${p.name} ──`);
+          s.projects.forEach((pr) => {
+            out.push(`  • ${pr.title}`, `    ${pr.year} | ${pr.duration}`, "");
           });
         }
       });
-
-      return output;
+      return out;
     },
 
     education: () => {
-      const output = ['=== Education (All Profiles) ===', ''];
-      
-      Object.values(allProfiles).forEach(profile => {
-        const eduSection = profile.sections.find(s => 
-          s.title.toLowerCase().includes('education')
+      const out = ["Education:", ""];
+      Object.values(profiles).forEach((p) => {
+        const s = p.sections.find((x) =>
+          x.title.toLowerCase().includes("education")
         );
-
-        if (eduSection) {
-          output.push(`--- ${profile.name} ---`);
-          eduSection.projects.forEach((project, i) => {
-            output.push(
-              `${i + 1}. ${project.title}`,
-              `   ${project.year} | ${project.rating}`,
-              `   ${project.description.substring(0, 100)}...`,
-              ''
-            );
-          });
+        if (s) {
+          out.push(`── ${p.name} ──`);
+          s.projects.forEach((pr) =>
+            out.push(
+              `  • ${pr.title}`,
+              `    ${pr.year} | ${pr.rating}`,
+              `    ${pr.description.substring(0, 100)}…`,
+              ""
+            )
+          );
         }
       });
-
-      return output;
+      return out;
     },
 
     resume: () => {
-      const output = ['=== COMPREHENSIVE RESUME ===', ''];
-
-      Object.entries(allProfiles).forEach(([, profile]) => {
-        output.push(`━━━━━ ${profile.name} ━━━━━`);
-        output.push('');
-        
-        profile.sections.forEach(section => {
-          output.push(`--- ${section.title} ---`);
-          section.projects.forEach(project => {
-            output.push(
-              `• ${project.title}`,
-              `  ${project.year} | ${project.category}`,
-            );
-            if (project.role) output.push(`  Role: ${project.role}`);
+      const out = ["=== COMPREHENSIVE RESUME ===", ""];
+      Object.values(profiles).forEach((p) => {
+        out.push(`━━ ${p.name} ━━`, "");
+        p.sections.forEach((s) => {
+          out.push(`  ${s.title}`);
+          s.projects.forEach((pr) => {
+            out.push(`    • ${pr.title}  (${pr.year})`);
+            if (pr.role) out.push(`      Role: ${pr.role}`);
           });
-          output.push('');
+          out.push("");
         });
       });
-
-      output.push('Type "download" to get the PDF version.');
-      return output;
+      out.push('Type "download" to get the PDF version.');
+      return out;
     },
 
     download: () => {
-      const link = document.createElement('a');
-      link.href = '/resume.pdf';
-      link.download = 'Resume.pdf';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      return ['Downloading resume.pdf...'];
+      const a = document.createElement("a");
+      a.href = "/resume.pdf";
+      a.download = "Resume.pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return ["Downloading resume.pdf…"];
     },
 
     contact: () => [
-      'Contact Information:',
-      '',
-      'Email: your.email@example.com',
-      'GitHub: github.com/yourusername',
-      'LinkedIn: linkedin.com/in/yourprofile',
-      'Portfolio: yourwebsite.com',
+      "Contact Information:",
+      "",
+      "  Email    : your.email@example.com",
+      "  GitHub   : github.com/yourusername",
+      "  LinkedIn : linkedin.com/in/yourprofile",
+      "  Portfolio: yourwebsite.com",
     ],
 
     search: (args) => {
-      const searchTerm = args.join(' ').toLowerCase();
-      if (!searchTerm) {
-        return ['Usage: search <keyword>', 'Example: search react'];
-      }
-
+      const q = args.join(" ").toLowerCase();
+      if (!q) return ["Usage: search <keyword>", "Example: search react"];
       const results = [];
-      
-      // Search across ALL profiles
-      Object.values(allProfiles).forEach(profile => {
-        profile.sections.forEach(section => {
-          section.projects.forEach(project => {
-            const searchableText = (
-              project.title + ' ' +
-              project.description + ' ' +
-              project.technologies.join(' ') + ' ' +
-              (project.tags || []).join(' ')
+      Object.values(profiles).forEach((p) =>
+        p.sections.forEach((s) =>
+          s.projects.forEach((pr) => {
+            const hay = (
+              pr.title + " " + pr.description + " " +
+              pr.technologies.join(" ") + " " + (pr.tags || []).join(" ")
             ).toLowerCase();
-
-            if (searchableText.includes(searchTerm)) {
-              results.push({
-                id: project.id,
-                title: project.title,
-                section: section.title,
-                category: project.category,
-                profile: profile.name,
-              });
-            }
-          });
-        });
-      });
-
-      if (results.length === 0) {
-        return [`No projects found matching "${searchTerm}"`];
-      }
-
-      const output = [`Found ${results.length} project(s) matching "${searchTerm}":`, ''];
-      results.forEach((result, i) => {
-        output.push(
-          `${i + 1}. ${result.title}`,
-          `   Profile: ${result.profile} | Section: ${result.section}`,
-          `   Category: ${result.category} | ID: ${result.id}`,
-          ''
-        );
-      });
-
-      return output;
+            if (hay.includes(q))
+              results.push({ id: pr.id, title: pr.title, profile: p.name, section: s.title });
+          })
+        )
+      );
+      if (!results.length) return [`No results for "${q}"`];
+      const out = [`Found ${results.length} result(s) for "${q}":`, ""];
+      results.forEach((r, i) =>
+        out.push(
+          `  ${i + 1}. ${r.title}`,
+          `     Profile: ${r.profile}  |  Section: ${r.section}  |  ID: ${r.id}`,
+          ""
+        )
+      );
+      return out;
     },
 
     stats: () => {
-      const stats = {
-        totalProjects: 0,
-        totalTechnologies: new Set(),
-        totalSections: 0,
-        categories: new Set(),
-        profiles: Object.keys(allProfiles).length,
-      };
-
-      Object.values(allProfiles).forEach(profile => {
-        stats.totalSections += profile.sections.length;
-        profile.sections.forEach(section => {
-          stats.totalProjects += section.projects.length;
-          section.projects.forEach(project => {
-            project.technologies.forEach(tech => stats.totalTechnologies.add(tech));
-            stats.categories.add(project.category);
-          });
-        });
+      const s = { projects: 0, techs: new Set(), cats: new Set() };
+      Object.values(profiles).forEach((p) =>
+        p.sections.forEach((sec) =>
+          sec.projects.forEach((pr) => {
+            s.projects++;
+            pr.technologies.forEach((t) => s.techs.add(t));
+            s.cats.add(pr.category);
+          })
+        )
+      );
+      const breakdown = Object.values(profiles).map((p) => {
+        let n = 0;
+        p.sections.forEach((sec) => (n += sec.projects.length));
+        return `  • ${p.name.padEnd(12)} ${n} projects`;
       });
-
       return [
-        '=== Portfolio Statistics ===',
-        '',
-        `Total Profiles: ${stats.profiles}`,
-        `Total Sections: ${stats.totalSections}`,
-        `Total Projects: ${stats.totalProjects}`,
-        `Technologies: ${stats.totalTechnologies.size}`,
-        `Categories: ${stats.categories.size}`,
-        '',
-        'Profile Breakdown:',
-        ...Object.entries(allProfiles).map(([, profile]) => {
-          let projectCount = 0;
-          profile.sections.forEach(s => projectCount += s.projects.length);
-          return `  • ${profile.name}: ${projectCount} projects`;
-        }),
+        "Portfolio Statistics:",
+        "",
+        `  Profiles     : ${Object.keys(profiles).length}`,
+        `  Projects     : ${s.projects}`,
+        `  Technologies : ${s.techs.size}`,
+        `  Categories   : ${s.cats.size}`,
+        "",
+        "Breakdown:",
+        ...breakdown,
       ];
     },
 
-    clear: () => [],
-
-    gui: () => {
-      onClose();
-      return ['Switching to GUI mode...'];
-    },
+    clear: () => "__clear__",
+    gui:   () => "__gui__",
   };
 
-  const handleCommand = (cmd) => {
-    const trimmed = cmd.trim();
-    if (!trimmed) return;
+  /* ── Command execution ── */
+  const handleCommand = useCallback(
+    (raw) => {
+      if (!raw.trim()) return;
 
-    // Handle clear separately
-    if (trimmed.toLowerCase() === 'clear') {
-      setHistory([]);
-      return;
-    }
+      // Save to arrow-key history
+      setCmdHistory((prev) => [raw, ...prev].slice(0, 50));
+      setHistoryIdx(-1);
 
-    const newHistory = [...history, { type: 'input', text: `$ ${cmd}` }];
+      const parts = raw.trim().split(/\s+/);
+      const cmd   = parts[0].toLowerCase();
+      const args  = parts.slice(1);
 
-    // Parse command and arguments
-    const parts = trimmed.split(/\s+/);
-    const commandName = parts[0].toLowerCase();
-    const args = parts.slice(1);
+      const addInput  = (text) => ({ type: "input",  text: `❯ ${text}` });
+      const addOutput = (text) => ({ type: "output", text });
+      const addError  = (text) => ({ type: "error",  text });
+      const addEmpty  = ()     => ({ type: "empty" });
 
-    // Check built-in commands
-    if (commands[commandName]) {
-      try {
-        const output = commands[commandName](args);
-        if (output && output.length > 0) {
-          output.forEach(line => {
-            newHistory.push({ type: 'output', text: line });
-          });
+      // Handle sentinels that need to fire outside the state updater
+      if (cmd === "clear") { setHistory([]); return; }
+      if (cmd === "gui") {
+        setHistory((prev) => [...prev, addInput(raw), addOutput("Clearing session…"), addOutput("Switching to GUI mode…"), addEmpty()]);
+        setTimeout(() => {
+          localStorage.removeItem("selectedProfile");
+          navigate("/");
+        }, 120);
+        return;
+      }
+
+      setHistory((prev) => {
+        const lines = [...prev, addInput(raw)];
+
+        if (commands[cmd]) {
+          try {
+            const result = commands[cmd](args);
+            if (Array.isArray(result)) {
+              result.forEach((l) =>
+                lines.push(l === "" ? addEmpty() : addOutput(l))
+              );
+            }
+          } catch (e) {
+            lines.push(addError(`Error: ${e.message}`));
+          }
+        } else if (customScripts[cmd]) {
+          const result = executeSafeScript(customScripts[cmd].fn, args);
+          result.forEach((l) =>
+            lines.push(l === "" ? addEmpty() : addOutput(l))
+          );
+        } else {
+          lines.push(addError(`Command not found: ${cmd}`));
+          lines.push(addOutput('Type "help" to see available commands'));
         }
-      } catch (error) {
-        newHistory.push({ type: 'error', text: `Error: ${error.message}` });
-      }
-    }
-    // Check custom scripts
-    else if (customScripts[commandName]) {
-      try {
-        const output = executeSafeScript(customScripts[commandName].fn, args);
-        output.forEach(line => {
-          newHistory.push({ type: 'output', text: line });
-        });
-      } catch (error) {
-        newHistory.push({ type: 'error', text: `Script error: ${error.message}` });
-      }
-    }
-    // Unknown command
-    else {
-      newHistory.push({ 
-        type: 'error', 
-        text: `Command not found: ${commandName}`,
-      });
-      newHistory.push({
-        type: 'output',
-        text: 'Type "help" to see available commands',
-      });
-    }
 
-    setHistory(newHistory);
-  };
+        lines.push(addEmpty());
+        return lines;
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [onClose]
+  );
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
+    if (e.key === "Enter") {
       handleCommand(input);
-      setInput('');
+      setInput("");
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const next = Math.min(historyIdx + 1, cmdHistory.length - 1);
+      setHistoryIdx(next);
+      setInput(cmdHistory[next] ?? "");
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = Math.max(historyIdx - 1, -1);
+      setHistoryIdx(next);
+      setInput(next === -1 ? "" : cmdHistory[next] ?? "");
+    } else if (e.key === "Escape") {
+      onClose();
     }
   };
 
-  useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
-    }
-  }, [history]);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  // Example: Register custom scripts on mount (only once)
-// Empty dependency array - run only once on mount
-
+  /* ── Render ── */
   return (
-    <div className="fixed inset-0 bg-black z-50 flex flex-col p-6 font-mono selection:bg-green-500 selection:text-black">
-      
-      <button 
-        onClick={onClose} 
-        className="absolute top-4 right-6 text-gray-500 hover:text-red-500 transition-colors text-xs uppercase tracking-widest"
-      >
-        [ Close Shell ]
-      </button>
+    <div style={S.overlay} className="term-overlay-anim selection:bg-green-500 selection:text-black">
+      {/* Atmosphere layers */}
+      <div style={S.scanlines} />
+      <div style={S.vignette} />
+      <div style={S.redLine} className="term-redline-anim" />
 
-      <div 
-        ref={terminalRef} 
-        className="flex-1 overflow-y-auto scrollbar-hide text-sm md:text-base mt-8"
-        onClick={() => inputRef.current?.focus()}
-      >
-        {history.map((line, i) => (
-          <div key={i} className="mb-1 leading-relaxed">
-            {line.type === 'input' && <span className="text-green-500 mr-2">{line.text}</span>}
-            {line.type === 'output' && <span className="text-gray-300">{line.text}</span>}
-            {line.type === 'error' && <span className="text-red-500">{line.text}</span>}
+      {/* Title bar */}
+      <div style={S.titleBar}>
+        <div style={S.brand}>
+          <div style={S.dots}>
+            <div
+              style={{ ...S.dot, ...S.dotR }}
+              className="term-dot-hover"
+              onClick={onClose}
+              title="Close"
+            />
+            <div style={{ ...S.dot, ...S.dotY }} className="term-dot-hover" />
+            <div style={{ ...S.dot, ...S.dotG }} className="term-dot-hover" />
           </div>
-        ))}
-
-        <div className="flex items-center mt-2">
-          <span className="text-green-500 mr-3 font-bold">❯</span>
-          <input
-            ref={inputRef}
-            autoFocus
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="flex-1 bg-transparent text-gray-200 outline-none caret-green-500 placeholder-gray-600"
-            placeholder="Type a command..."
-            autoComplete="off"
-            spellCheck="false"
-          />
+          <span style={S.titleText}>Portfolio Terminal — v2.0</span>
         </div>
+        <button
+          style={S.closeBtn}
+          className="term-close-hover"
+          onClick={onClose}
+        >
+          [ ESC ]
+        </button>
       </div>
 
-      <div className="text-gray-700 text-xs mt-2 text-center">
-        Terminal v2.0 | All Profiles | Safe Script Execution
+      {/* Scrollable history */}
+      <div
+        ref={bodyRef}
+        style={S.body}
+        className="term-body-scroll"
+        onClick={() => inputRef.current?.focus()}
+      >
+        {/* ASCII banner */}
+        <span style={S.ascii}>{ASCII}</span>
+
+        {history.map((line, i) => {
+          if (line.type === "empty")
+            return <span key={i} style={{ display: "block", height: 6 }} />;
+          return (
+            <span
+              key={i}
+              className="term-line-anim"
+              style={{
+                ...S.lineBase,
+                ...(line.type === "input"  ? S.lineInput  : {}),
+                ...(line.type === "output" ? S.lineOutput : {}),
+                ...(line.type === "error"  ? S.lineError  : {}),
+                ...(line.type === "system" ? S.lineSystem : {}),
+              }}
+            >
+              {line.text}
+            </span>
+          );
+        })}
+
+        <div style={{ height: 4 }} />
+      </div>
+
+      {/* Prompt */}
+      <div style={S.promptRow}>
+        <span style={S.promptSymbol} className="term-prompt-anim">❯</span>
+        <input
+          ref={inputRef}
+          autoFocus
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          style={S.promptInput}
+          placeholder="type a command…"
+          autoComplete="off"
+          spellCheck="false"
+        />
+      </div>
+
+      {/* Status bar */}
+      <div style={S.statusBar}>
+        <span style={S.statusTxt}>
+          safe shell &nbsp;|&nbsp; all profiles loaded &nbsp;|&nbsp; type{" "}
+          <span style={{ color: "#E50914" }}>help</span>
+        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <span style={S.statusTxt}>live</span>
+          <div style={S.statusDot} className="term-blink-anim" />
+        </div>
       </div>
     </div>
   );
