@@ -1,35 +1,54 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, BookmarkX, Plus, Check, ListVideo } from 'lucide-react';
 import { useProfile } from '../contexts/useProfile.js';
 
+// ─── Shared module-level store ─────────────────────────────────────────────
+// Using a module singleton ensures every useMyList() instance across the app
+// reads and writes the SAME list without needing a separate Context.
 const STORAGE_KEY = 'portfolio_my_list';
 
-// ─── Hook: manage "My List" in localStorage ───────────────────────────────
+let _list = (() => {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+  catch { return []; }
+})();
+
+const _listeners = new Set();
+
+function _notify() {
+  _listeners.forEach((fn) => fn([..._list]));
+}
+
+function _save(next) {
+  _list = next;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  _notify();
+}
+
+// ─── Hook ──────────────────────────────────────────────────────────────────
 export function useMyList() {
-  const [list, setList] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
-    catch { return []; }
-  });
+  const [list, setList] = useState([..._list]);
 
-  const save = (next) => {
-    setList(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  };
+  useEffect(() => {
+    _listeners.add(setList);
+    return () => _listeners.delete(setList);
+  }, []);
 
-  const add    = (id) => { if (!list.includes(id)) save([...list, id]); };
-  const remove = (id) => save(list.filter((x) => x !== id));
-  const toggle = (id) => (list.includes(id) ? remove(id) : add(id));
+  const add    = (id) => { if (!_list.includes(id)) _save([..._list, id]); };
+  const remove = (id) => _save(_list.filter((x) => x !== id));
+  const toggle = (id) => (_list.includes(id) ? remove(id) : add(id));
   const has    = (id) => list.includes(id);
 
   return { list, add, remove, toggle, has };
 }
 
-// ─── MyListButton — use anywhere on a project card ────────────────────────
+// ─── MyListButton ──────────────────────────────────────────────────────────
+// Drop this onto any project card. Clicking never bubbles to the card's onClick.
 export function MyListButton({ projectId, size = 20 }) {
   const { has, toggle } = useMyList();
   const saved = has(projectId);
+
   return (
     <motion.button
       onClick={(e) => { e.stopPropagation(); toggle(projectId); }}
@@ -42,14 +61,17 @@ export function MyListButton({ projectId, size = 20 }) {
           : 'border-gray-400 text-gray-300 hover:border-white hover:text-white'
         }`}
     >
-      {saved ? <Check size={size - 4} strokeWidth={3} /> : <Plus size={size - 4} />}
+      {saved
+        ? <Check size={size - 4} strokeWidth={3} />
+        : <Plus  size={size - 4} />
+      }
     </motion.button>
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────
+// ─── Page ──────────────────────────────────────────────────────────────────
 export default function MyListPage() {
-  const navigate  = useNavigate();
+  const navigate    = useNavigate();
   const { profile } = useProfile();
   const { list, remove } = useMyList();
 
@@ -68,7 +90,7 @@ export default function MyListPage() {
   return (
     <div className="min-h-screen bg-[#141414] text-white pb-20">
 
-      {/* ── Header ───────────────────────────────────────────────────── */}
+      {/* Header */}
       <div className="px-4 md:px-12 pt-8 pb-6 border-b border-white/5">
         <button
           onClick={() => navigate('/browse')}
@@ -102,7 +124,7 @@ export default function MyListPage() {
               <ListVideo size={56} className="text-gray-700 mb-4" />
               <p className="text-gray-400 text-lg font-semibold">Your list is empty</p>
               <p className="text-gray-600 text-sm mt-2 max-w-xs">
-                Add projects using the <Plus size={12} className="inline" /> button on any project card.
+                Hit the <Plus size={12} className="inline" /> button on any project card to save it here.
               </p>
               <button
                 onClick={() => navigate('/browse')}
@@ -126,7 +148,7 @@ export default function MyListPage() {
                   transition={{ delay: i * 0.05, duration: 0.3 }}
                   className="relative group cursor-pointer rounded-lg overflow-hidden bg-[#181818] border border-white/5 hover:border-white/20 transition-all hover:shadow-2xl"
                 >
-                  {/* Remove button */}
+                  {/* Remove button (top-right, hover-reveal) */}
                   <motion.button
                     onClick={(e) => { e.stopPropagation(); remove(project.id); }}
                     whileHover={{ scale: 1.1 }}
@@ -137,13 +159,14 @@ export default function MyListPage() {
                     <BookmarkX size={15} />
                   </motion.button>
 
-                  {/* Card body */}
                   <div onClick={() => navigate(`/project/${project.id}`)}>
                     <div className="aspect-video overflow-hidden">
                       {project.image ? (
                         <img
                           src={project.image}
                           alt={project.title}
+                          loading="lazy"
+                          decoding="async"
                           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                         />
                       ) : (
