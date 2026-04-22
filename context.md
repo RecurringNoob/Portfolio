@@ -34,7 +34,8 @@ A Netflix-inspired developer portfolio where each "profile" (Personal, Fullstack
 | Row / Category | Section (e.g. "Work Experience", "Education") |
 | Hero billboard | Featured project or personal intro |
 | Detail modal / page | Project detail page |
-| Search | Terminal `search` command |
+| Search | Navbar inline search or Terminal `search` command |
+| My List | Bookmarked projects (localStorage) |
 
 ---
 
@@ -48,7 +49,7 @@ A Netflix-inspired developer portfolio where each "profile" (Personal, Fullstack
 | Styling | Tailwind CSS v4 |
 | Icons | Lucide React |
 | State | React Context API |
-| Persistence | `localStorage` (selected profile) |
+| Persistence | `localStorage` (selected profile, My List) |
 
 ---
 
@@ -69,7 +70,10 @@ src/
 ├── pages/
 │   ├── ProfileSelectionPage.jsx  # "Who's watching?" screen
 │   ├── BrowsePage.jsx            # Main browsing page (billboard + rows)
-│   └── ProjectPage.jsx           # Full-screen project detail page
+│   ├── ProjectPage.jsx           # Full-screen project detail page
+│   ├── ProjectsPage.jsx          # All-projects grid with search + category filter
+│   ├── NewPopularPage.jsx        # Projects ranked by recency + match score
+│   └── MyListPage.jsx            # Bookmarked/saved projects (localStorage)
 │
 └── components/
     ├── common/
@@ -129,7 +133,25 @@ A React Context that holds the currently selected profile. Wraps the entire app 
 
 **Persistence**: On mount, `ProfileContext` reads `localStorage` key `selectedProfile`. If a valid saved key exists, it auto-selects that profile so users don't have to re-pick on every visit.
 
-**Consumed by**: `App.jsx`, `BrowsePage.jsx`, `ProjectPage.jsx`, `Navbar.jsx`, `Chatbot.jsx`
+**Consumed by**: `App.jsx`, `BrowsePage.jsx`, `ProjectPage.jsx`, `Navbar.jsx`, `Chatbot.jsx`, `ProjectsPage.jsx`, `NewPopularPage.jsx`, `MyListPage.jsx`
+
+### `useMyList` hook (`src/pages/MyListPage.jsx`)
+
+A lightweight custom hook exported from `MyListPage.jsx` that manages the user's saved/bookmarked project IDs in `localStorage`.
+
+**localStorage key**: `portfolio_my_list`
+
+**Exported values:**
+
+| Value | Type | Description |
+|---|---|---|
+| `list` | `string[]` | Array of saved project `id` strings |
+| `add(id)` | `function` | Adds a project ID to the list |
+| `remove(id)` | `function` | Removes a project ID from the list |
+| `toggle(id)` | `function` | Adds if not present, removes if present |
+| `has(id)` | `function` | Returns `true` if project ID is in the list |
+
+**`MyListButton` component** (also exported from `MyListPage.jsx`): a drop-in `+` / `✓` toggle button that can be placed on any project card. Accepts a `projectId` prop and an optional `size` prop (default `20`).
 
 ---
 
@@ -142,6 +164,9 @@ Defined in `App.jsx`. Uses React Router v6 `<Routes>` / `<Route>`.
 | `/select-profile` | `ProfileSelectionPage` | Always accessible |
 | `/browse` | `BrowsePage` | Requires profile selected |
 | `/project/:id` | `ProjectPage` | Requires profile selected |
+| `/projects` | `ProjectsPage` | Requires profile selected |
+| `/new-popular` | `NewPopularPage` | Requires profile selected |
+| `/my-list` | `MyListPage` | Requires profile selected |
 | `*` (catch-all) | Redirect | → `/select-profile` if no profile, otherwise → `/browse` |
 
 **Auth guard pattern**: If `profile` is `null` (no profile selected), any unknown route redirects to `/select-profile`. Once a profile is selected, the root `/` redirects to `/browse`.
@@ -204,6 +229,43 @@ If the project is not found, renders a "not found" message with a back link.
 
 ---
 
+### `ProjectsPage.jsx` *(new)*
+
+A full grid view of all projects in the active profile. Accessed via `/projects`.
+
+**Features:**
+- Live text search across title, description, and technologies
+- Category filter pills (derived dynamically from `project.category` values)
+- Animated grid using `AnimatePresence` + `motion.div` with staggered entrance
+- Empty state with "Clear filters" CTA
+- Each card shows thumbnail, title, year, category badge, tech stack on hover, and match badge
+- Clicking a card navigates to `/project/:id`
+
+---
+
+### `NewPopularPage.jsx` *(new)*
+
+A ranked view of projects sorted by recency (`year` descending) then match score. Accessed via `/new-popular`.
+
+**Layout:**
+- Top 3 projects rendered as large spotlight cards with a large watermark rank number (1, 2, 3) and a "Top Rated" badge on #1
+- Remaining projects rendered as a compact ranked list (rank number, thumbnail, title, description snippet, match %, year)
+- Framer Motion entrance animations (cards slide up, list items slide in from left)
+
+---
+
+### `MyListPage.jsx` *(new)*
+
+Displays projects the user has bookmarked. Accessed via `/my-list`. Persists via `localStorage` key `portfolio_my_list`.
+
+**Features:**
+- Grid of saved project cards with a hover-reveal "Remove" (`BookmarkX`) button
+- Empty state with a "Browse Projects" CTA
+- Animated card removal via `AnimatePresence` `layout` prop
+- Exports `useMyList` hook and `MyListButton` component for use elsewhere (see §5)
+
+---
+
 ## 8. Components
 
 ### `Billboard.jsx` (`components/common/`)
@@ -244,12 +306,19 @@ Top navigation bar.
 - `onTerminal` — callback to toggle the Terminal overlay
 
 **Behaviour:**
-- Becomes fixed/opaque after scrolling past 50px (uses `window.scrollY` listener); transparent gradient while at top
-- A spacer `<div>` (class `h-16`) is rendered above it when fixed to prevent content jump
-- "PORTFOLIO" logo navigates to `/browse`
-- Profile avatar click calls `logout()` then navigates to `/select-profile`
-- Terminal icon (`TerminalIcon`) calls `onTerminal`
-- Search and Bell icons are styled but non-functional
+- Becomes fixed/opaque (with `backdrop-blur`) after scrolling past 50px; transparent gradient while at top
+- A spacer `<div>` (class `h-16`) prevents content jump when fixed
+- "PORTFOLIO" logo navigates to `/browse` with `whileHover` scale animation
+- **Nav links** (desktop): Home, Projects, New & Popular, My List — active link has a sliding `layoutId` underline via Framer Motion; non-active links show a hover underline via CSS scale transition
+- **Mobile**: Collapses links into a "Browse ›" label
+- **Inline search**: Clicking the Search icon expands an animated input field in place (width animates from 0 → 220px). `Enter` navigates to `/browse?search=<query>`. `Escape` or the `×` button closes it
+- **Bell icon**: Shows a red pulse dot (clears on click)
+- **Terminal icon**: Calls `onTerminal`; tooltip shows `Ctrl + \``
+- **Profile avatar**: Shows profile name label and `ChevronDown` caret on desktop hover; clicking opens a dropdown menu
+- **Profile dropdown** (click): "Viewing as [Profile Name]" header, "Switch Profile" (navigates to `/select-profile` without logging out), "Sign Out" (calls `logout()` + navigates to `/select-profile`); closes on outside click via `mousedown` listener; animated with `AnimatePresence`
+- Framer Motion `whileHover` / `whileTap` on all icon buttons
+
+> **Removed**: The "Kids" label that previously appeared between Bell and Terminal icons has been removed.
 
 ---
 
@@ -416,7 +485,7 @@ Full schema for `src/data/profiles.js`:
 | Surface | `#181818` | Modal, card backgrounds |
 | Surface-2 | `#2f2f2f` | Related project cards |
 | Surface-3 | `#333` | Hover state for feature rows |
-| Accent Red | `#E50914` | Logo, selection highlight |
+| Accent Red | `#E50914` | Logo, selection highlight, notification dot |
 | Accent Green | `#46d369` | Match percentage, terminal prompt |
 | Accent Emerald | `emerald-400` | Navbar icons |
 | Border | `#404040` | Section dividers |
@@ -452,8 +521,14 @@ Full schema for `src/data/profiles.js`:
 ### Profile persistence
 Selected profile is saved to `localStorage` under key `selectedProfile`. On app load, `ProfileContext` restores it automatically, bypassing the selection screen.
 
+### My List persistence
+Bookmarked project IDs are saved to `localStorage` under key `portfolio_my_list`. Managed via the `useMyList` hook exported from `MyListPage.jsx`. The `MyListButton` component can be dropped onto any project card.
+
 ### Terminal shortcut
 `Ctrl + `` ` `` ` toggles the terminal from anywhere on `BrowsePage`.
+
+### Navbar inline search
+Clicking the Search icon in the Navbar expands an animated inline input. Pressing `Enter` navigates to `/browse?search=<query>`. Pressing `Escape` or the `×` button collapses it.
 
 ### Row scrolling
 Left/right arrow buttons appear on row hover and scroll by one viewport width. Overflow is hidden with `scrollbar-hide` (custom Tailwind utility).
@@ -464,9 +539,16 @@ BrowsePage (Row card click)
   → ProjectModal (quick view)
     → "Play" button → /project/:id (ProjectPage)
       → "Back to Browse" → /browse
-```
 
-Alternatively, Row cards can navigate directly to `/project/:id` when `onSelect` is not provided.
+/projects (ProjectsPage)
+  → card click → /project/:id (ProjectPage)
+
+/new-popular (NewPopularPage)
+  → card / row click → /project/:id (ProjectPage)
+
+/my-list (MyListPage)
+  → card click → /project/:id (ProjectPage)
+```
 
 ### Mute toggle
 `ProjectPage` has a mute/unmute button (VolumeX / Volume2 icon). Currently cosmetic — no actual video/audio is wired up.
@@ -499,8 +581,15 @@ In `Billboard.jsx`, the "Resume" and "About Me" buttons are inert. Connect them 
 - "Resume" → `links.resume` in the hero object, or trigger a PDF download
 - "About Me" → a dedicated `/about` route or a modal
 
-### Adding search to Navbar
-The `Search` icon in `Navbar.jsx` is currently decorative. Wire it to:
-- Open a search input overlay
-- Call the same logic as the terminal's `search` command
-- Navigate to filtered results or highlight matching rows
+### Adding `MyListButton` to project cards
+Import `MyListButton` from `pages/MyListPage.jsx` and drop it into any card component:
+```jsx
+import { MyListButton } from '../pages/MyListPage.jsx';
+// Inside a card:
+<MyListButton projectId={project.id} size={20} />
+```
+
+### Adding a new page
+1. Create the page in `src/pages/`.
+2. Add a `<Route>` in `App.jsx` (wrap with auth guard if needed).
+3. Add a nav link entry to the `navLinks` array in `Navbar.jsx`.
