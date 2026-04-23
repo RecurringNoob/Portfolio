@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
-import { X, Play, Plus, ThumbsUp } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, Play, ThumbsUp } from 'lucide-react';
+import { MyListButton } from '../pages/MyListPage.jsx';
 
 export default function ProjectModal({ project, onClose }) {
   const navigate = useNavigate();
@@ -13,85 +14,135 @@ export default function ProjectModal({ project, onClose }) {
   return (
     <AnimatePresence>
       {project && (
-        <motion.div
-          className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-        >
-          <motion.div className="absolute inset-0" onClick={onClose} />
-
+        <>
+          {/* Backdrop */}
           <motion.div
-            layoutId={project.id}
-            initial={{ scale: 0.95 }}
-            animate={{ scale: 1 }}
-            exit={{ scale: 0.95 }}
-            transition={{ duration: 0.25 }}
-            className="relative w-full max-w-4xl bg-[#181818] rounded-xl overflow-hidden shadow-2xl z-10"
+            key="modal-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={onClose}
           >
-            <button
-              onClick={onClose}
-              className="absolute top-4 right-4 p-2 bg-black/60 rounded-full text-white hover:bg-black z-20"
+            {/* Modal panel */}
+            <motion.div
+              key="modal-panel"
+              initial={{ opacity: 0, scale: 0.92, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 20 }}
+              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+              className="relative w-full max-w-lg bg-[#181818] rounded-xl overflow-hidden shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
             >
-              <X />
-            </button>
+              {/* Close button */}
+              <button
+                onClick={onClose}
+                className="absolute top-3 right-3 z-10 bg-black/60 hover:bg-black/80 rounded-full p-1.5 text-gray-400 hover:text-white transition"
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
 
-            <div className="relative h-64 md:h-96">
-              <img
-                src={project.image}
-                className="w-full h-full object-cover"
-                alt={project.title}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#181818] via-transparent to-transparent" />
+              {/* Hero image */}
+              <div className="relative aspect-video overflow-hidden">
+                {project.image ? (
+                  <img
+                    src={project.image}
+                    alt={project.title}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900" />
+                )}
+                {/* Bottom gradient */}
+                <div className="absolute inset-0 bg-gradient-to-t from-[#181818] via-transparent to-transparent" />
+              </div>
 
-              <div className="absolute bottom-6 left-6 space-y-4">
-                <h2 className="text-3xl md:text-4xl font-bold text-white">
+              {/* Content */}
+              <div className="px-5 pb-5 -mt-6 relative">
+                {/* Action row */}
+                <div className="flex items-center gap-3 mb-4">
+                  {/* Play */}
+                  <motion.button
+                    onClick={handlePlay}
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="flex items-center gap-2 bg-white text-black px-4 py-2 rounded-full text-sm font-bold hover:bg-gray-200 transition"
+                  >
+                    <Play size={14} fill="black" />
+                    View Project
+                  </motion.button>
+
+                  {/* MyListButton */}
+                  <MyListButton projectId={project.id} size={22} />
+
+                  {/* ThumbsUp — cosmetic */}
+                  <motion.button
+                    whileHover={{ scale: 1.15 }}
+                    whileTap={{ scale: 0.9 }}
+                    className="rounded-full border-2 border-gray-400 text-gray-300 hover:border-white hover:text-white p-1 transition-colors"
+                    title="Like"
+                  >
+                    <ThumbsUp size={14} />
+                  </motion.button>
+                </div>
+
+                {/* Meta row */}
+                <div className="flex items-center gap-3 text-xs mb-3">
+                  {project.match && (
+                    <span className="text-emerald-400 font-bold">{project.match}</span>
+                  )}
+                  {project.year && (
+                    <span className="text-gray-400">{project.year}</span>
+                  )}
+                  {project.rating && (
+                    <span className="border border-gray-600 text-gray-400 px-1 rounded">
+                      {project.rating}
+                    </span>
+                  )}
+                  {project.duration && (
+                    <span className="text-gray-400">{project.duration}</span>
+                  )}
+                </div>
+
+                {/* Title */}
+                <h2 className="text-white text-lg font-bold mb-2 leading-tight">
                   {project.title}
                 </h2>
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={handlePlay}
-                    className="bg-white text-black px-6 py-2 rounded-md font-bold flex items-center gap-2 hover:bg-white/90"
-                  >
-                    <Play fill="black" size={20} /> Play
-                  </button>
-                  <button className="p-2 border border-gray-500 rounded-full text-white hover:border-white">
-                    <Plus />
-                  </button>
-                  <button className="p-2 border border-gray-500 rounded-full text-white hover:border-white">
-                    <ThumbsUp />
-                  </button>
+                {/* Description */}
+                {project.description && (
+                  <p className="text-gray-400 text-sm leading-relaxed line-clamp-3 mb-4">
+                    {project.description}
+                  </p>
+                )}
+
+                {/* Bottom meta */}
+                <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-gray-500">
+                  {project.technologies?.length > 0 && (
+                    <div>
+                      <span className="text-gray-400 font-medium">Stack: </span>
+                      {project.technologies.slice(0, 5).join(', ')}
+                    </div>
+                  )}
+                  {project.category && (
+                    <div>
+                      <span className="text-gray-400 font-medium">Category: </span>
+                      {project.category}
+                    </div>
+                  )}
+                  {project.role && (
+                    <div>
+                      <span className="text-gray-400 font-medium">Role: </span>
+                      {project.role}
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
-
-            <div className="p-6 md:p-8 grid md:grid-cols-3 gap-6 text-white">
-              <div className="md:col-span-2 space-y-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-green-400 font-bold">{project.match || '98% Match'}</span>
-                  <span className="text-gray-400">{project.year || '2024'}</span>
-                  <span className="border border-gray-500 px-1 text-xs rounded">
-                    {project.rating || 'HD'}
-                  </span>
-                </div>
-                <p className="text-gray-300 text-sm leading-relaxed">{project.description}</p>
-              </div>
-
-              <div className="text-sm space-y-2 text-gray-300">
-                <p>
-                  <span className="text-gray-500">Tech:</span> {project.technologies.join(', ')}
-                </p>
-                <p>
-                  <span className="text-gray-500">Category:</span> {project.category}
-                </p>
-                <p>
-                  <span className="text-gray-500">Role:</span> {project.role || 'Developer'}
-                </p>
-              </div>
-            </div>
+            </motion.div>
           </motion.div>
-        </motion.div>
+        </>
       )}
     </AnimatePresence>
   );

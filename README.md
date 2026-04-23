@@ -252,11 +252,7 @@ mycommand: (args) => {
 2. Add a `<Route>` in `App.jsx` (wrap with the auth guard if needed).
 3. Add a nav link entry to the `navLinks` array in `Navbar.jsx`.
 
-### Upgrade the Chatbot to use AI
 
-Replace `getBotReply` in `Chatbot.jsx` with a call to any LLM API. Pass `profile` from context as the system prompt so the bot has full knowledge of your projects.
-
----
 
 ## 🎨 Design System
 

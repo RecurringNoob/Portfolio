@@ -1,17 +1,26 @@
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useProfile } from '../contexts/useProfile.js';
 import { User, Code, Brain } from 'lucide-react';
+import { pingServer } from '../service/chatService.js';
 
 const profiles = {
   personal: { name: 'Personal', color: 'bg-blue-600', icon: User },
   fullstack: { name: 'Fullstack', color: 'bg-red-600', icon: Code },
-  aiml: { name: 'AI/ML', color: 'bg-purple-600', icon: Brain },
+  aiml:      { name: 'AI/ML',    color: 'bg-purple-600', icon: Brain },
 };
 
 export default function ProfileSelectionPage() {
   const { selectProfile, logout } = useProfile();
   const navigate = useNavigate();
+
+  // ── Silent wake-up ping ──────────────────────────────────────────────
+  // The recruiter will spend 30–60 s on this screen choosing a profile,
+  // which gives Render plenty of time to boot before they ever open chat.
+  useEffect(() => {
+    pingServer();
+  }, []);
 
   const handleSelect = (key) => {
     selectProfile(key);
@@ -19,9 +28,7 @@ export default function ProfileSelectionPage() {
   };
 
   const handleManageProfiles = () => {
-    // This just clears any existing profile and refreshes the selection screen
     logout();
-    // Reload the same page to reset state (optional)
     navigate('/select-profile', { replace: true });
   };
 

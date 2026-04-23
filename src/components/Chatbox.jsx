@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, Send, MessageCircle } from 'lucide-react';
+import { X, Send, MessageCircle, Loader } from 'lucide-react';
 import { sendChatMessage } from '../service/chatService.js';
 
 const QUICK_CHIPS = ['Projects', 'Skills', 'Contact', 'About me'];
@@ -9,46 +9,125 @@ const INITIAL_MESSAGE = {
   sender: 'bot',
 };
 
-export default function Chatbot() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState([INITIAL_MESSAGE]);
-  const [input, setInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
+// How often to retry while the server is cold-starting (ms)
+const RETRY_INTERVAL_MS = 5000;
 
+// ── Core send logic (module-level, no hooks) ──────────────────────────────
+// Defined outside the component so it has no closure over React state and
+// can be safely called from setInterval without ref or hoisting issues.
+// All mutable values are passed in explicitly as arguments.
+async function attemptSend(msg, isRetry, deps) {
+  const { setMessages, setIsTyping, setServerState, retryTimerRef, pendingMsgRef } = deps;
+
+  if (!isRetry) {
+    setMessages((prev) => [...prev, { text: msg, sender: 'user' }]);
+    setIsTyping(true);
+  }
+
+  const result = await sendChatMessage(msg);
+
+  if (result.ok) {
+    // ── Success ────────────────────────────────────────────────────────
+    if (retryTimerRef.current) {
+      clearInterval(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+    pendingMsgRef.current = null;
+    setServerState('idle');
+    setIsTyping(false);
+    setMessages((prev) => [...prev, { text: result.reply, sender: 'bot' }]);
+
+  } else if (result.coldStart) {
+    // ── 503 Cold-start ─────────────────────────────────────────────────
+    if (!isRetry) {
+      setServerState('warming');
+      setIsTyping(false);
+      pendingMsgRef.current = msg;
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          text: "⏳ Waking up the AI… this usually takes about 20 seconds. I'll send your message automatically once it's ready!",
+          sender: 'bot',
+          isStatus: true,
+        },
+      ]);
+
+      // deps object is stable across retries — refs are always current
+      retryTimerRef.current = setInterval(() => {
+        if (pendingMsgRef.current) {
+          attemptSend(pendingMsgRef.current, true, deps);
+        }
+      }, RETRY_INTERVAL_MS);
+    }
+
+  } else {
+    // ── Other error ────────────────────────────────────────────────────
+    if (retryTimerRef.current) {
+      clearInterval(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+    pendingMsgRef.current = null;
+    setServerState('idle');
+    setIsTyping(false);
+    setMessages((prev) => [
+      ...prev,
+      {
+        text: result.error || "Sorry, I couldn't reach the server. Please try again.",
+        sender: 'bot',
+      },
+    ]);
+  }
+}
+
+export default function Chatbot() {
+  const [isOpen, setIsOpen]           = useState(false);
+  const [messages, setMessages]       = useState([INITIAL_MESSAGE]);
+  const [input, setInput]             = useState('');
+  const [isTyping, setIsTyping]       = useState(false);
+  const [serverState, setServerState] = useState('idle');
+
+  const messagesEndRef = useRef(null);
+  const inputRef       = useRef(null);
+  const retryTimerRef  = useRef(null);
+  const pendingMsgRef  = useRef(null);
+
+  // Stable deps object — refs are always current, setters never change
+  const deps = { setMessages, setIsTyping, setServerState, retryTimerRef, pendingMsgRef };
+
+  // ── Auto-scroll ───────────────────────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
+  // ── Focus input when chat opens ───────────────────────────────────────
   useEffect(() => {
     if (isOpen) inputRef.current?.focus();
   }, [isOpen]);
 
-  const handleSend = async (text) => {
+  // ── Cleanup retry timer on unmount ────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      if (retryTimerRef.current) clearInterval(retryTimerRef.current);
+    };
+  }, []);
+
+  // ── Public handler called by UI ───────────────────────────────────────
+  const handleSend = (text) => {
     const msg = (text ?? input).trim();
-    if (!msg || isTyping) return;
-
+    if (!msg || isTyping || serverState === 'warming') return;
     setInput('');
-    setMessages((prev) => [...prev, { text: msg, sender: 'user' }]);
-    setIsTyping(true);
-
-    try {
-      const reply = await sendChatMessage(msg);
-      setMessages((prev) => [...prev, { text: reply, sender: 'bot' }]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        { text: "Sorry, I couldn't reach the server. Please try again.", sender: 'bot' },
-      ]);
-    } finally {
-      setIsTyping(false);
-    }
+    attemptSend(msg, false, deps);
   };
+
+  // ── Status indicator label ────────────────────────────────────────────
+  const statusLabel = serverState === 'warming'
+    ? { text: 'Waking up…', color: 'text-yellow-400', dot: 'bg-yellow-400' }
+    : { text: 'Online',     color: 'text-[#46d369]',  dot: 'bg-[#46d369]'  };
 
   return (
     <>
-      {/* Launcher */}
+      {/* ── Launcher ──────────────────────────────────────────────────── */}
       {!isOpen && (
         <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-3">
           <div className="bg-white dark:bg-[#1f1f1f] border border-gray-200 dark:border-gray-700 rounded-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 shadow-sm whitespace-nowrap">
@@ -59,12 +138,12 @@ export default function Chatbot() {
             className="relative w-14 h-14 bg-red-600 hover:bg-red-700 text-white rounded-full flex items-center justify-center shadow-lg transition"
           >
             <MessageCircle size={24} />
-            <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-[#46d369] rounded-full border-2 border-white" />
+            <span className={`absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white ${statusLabel.dot}`} />
           </button>
         </div>
       )}
 
-      {/* Chat panel */}
+      {/* ── Chat panel ────────────────────────────────────────────────── */}
       {isOpen && (
         <div className="fixed bottom-6 right-6 z-50 w-[360px] h-[500px] flex flex-col rounded-2xl overflow-hidden shadow-2xl border border-gray-700">
 
@@ -75,9 +154,12 @@ export default function Chatbot() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white">Portfolio Assistant</p>
-              <p className="text-[11px] text-[#46d369] flex items-center gap-1.5 mt-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#46d369] inline-block" />
-                Online
+              <p className={`text-[11px] flex items-center gap-1.5 mt-0.5 ${statusLabel.color}`}>
+                {serverState === 'warming'
+                  ? <Loader size={10} className="animate-spin" />
+                  : <span className={`w-1.5 h-1.5 rounded-full inline-block ${statusLabel.dot}`} />
+                }
+                {statusLabel.text}
               </p>
             </div>
             <button
@@ -94,7 +176,8 @@ export default function Chatbot() {
               <button
                 key={chip}
                 onClick={() => handleSend(chip)}
-                className="text-[11px] px-3 py-1 rounded-full border border-gray-600 text-gray-400 hover:text-white hover:border-gray-400 bg-transparent transition whitespace-nowrap"
+                disabled={serverState === 'warming'}
+                className="text-[11px] px-3 py-1 rounded-full border border-gray-600 text-gray-400 hover:text-white hover:border-gray-400 bg-transparent transition whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {chip}
               </button>
@@ -123,7 +206,9 @@ export default function Chatbot() {
                   className={`max-w-[76%] px-3.5 py-2.5 text-[13px] leading-relaxed
                     ${msg.sender === 'user'
                       ? 'bg-red-600 text-white rounded-2xl rounded-br-[4px]'
-                      : 'bg-[#2a2a2a] text-gray-200 rounded-2xl rounded-bl-[4px] border border-gray-700'
+                      : msg.isStatus
+                        ? 'bg-yellow-900/30 text-yellow-200 border border-yellow-700/40 rounded-2xl rounded-bl-[4px]'
+                        : 'bg-[#2a2a2a] text-gray-200 rounded-2xl rounded-bl-[4px] border border-gray-700'
                     }`}
                 >
                   {msg.text}
@@ -154,20 +239,26 @@ export default function Chatbot() {
 
           {/* Input */}
           <div className="bg-[#1a1a1a] border-t border-gray-700 px-3 py-3 flex-shrink-0">
-            <div className="flex items-center gap-2 bg-[#2a2a2a] rounded-full border border-gray-600 px-4 py-1.5">
+            <div className={`flex items-center gap-2 bg-[#2a2a2a] rounded-full border px-4 py-1.5 transition-colors ${
+              serverState === 'warming' ? 'border-yellow-700/50' : 'border-gray-600'
+            }`}>
               <input
                 ref={inputRef}
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                placeholder="Ask me something…"
+                placeholder={
+                  serverState === 'warming'
+                    ? 'Waiting for server…'
+                    : 'Ask me something…'
+                }
                 className="flex-1 bg-transparent text-sm text-white placeholder-gray-600 outline-none"
-                disabled={isTyping}
+                disabled={isTyping || serverState === 'warming'}
               />
               <button
                 onClick={() => handleSend()}
-                disabled={isTyping || !input.trim()}
+                disabled={isTyping || !input.trim() || serverState === 'warming'}
                 className="w-8 h-8 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center flex-shrink-0 transition disabled:opacity-40"
               >
                 <Send size={13} className="text-white" />
