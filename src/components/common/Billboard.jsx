@@ -1,6 +1,6 @@
 import { Play, Info } from 'lucide-react';
 
-export default function Billboard({ hero}) {
+export default function Billboard({ hero }) {
   return (
     <header className="relative h-[75vh] min-h-[500px] w-full overflow-hidden">
       <img
@@ -8,34 +8,30 @@ export default function Billboard({ hero}) {
         alt={hero.title}
         className="absolute inset-0 w-full h-full object-cover brightness-90 contrast-110"
       />
-
-      <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/60 to-transparent" />
-      <div className="absolute inset-0 bg-gradient-to-r from-[#141414] via-transparent to-transparent" />
-
-      <div className="relative h-full flex flex-col justify-end px-6 md:px-14 pb-28 max-w-xl space-y-5">
-        <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white drop-shadow-lg">
-          {hero.title}
-        </h1>
-
-        <div className="flex items-center gap-3 text-white font-semibold drop-shadow-md">
-          <span className="text-[#46d369]">{hero.match}</span>
-          <span>{hero.year}</span>
-          <span className="border px-1 text-sm">{hero.rating}</span>
-          <span>{hero.duration}</span>
-        </div>
-
-        <p className="text-gray-200 text-sm md:text-lg leading-relaxed line-clamp-3 drop-shadow-md">
-          {hero.description}
-        </p>
-
-        <div className="flex gap-3">
-          <button className="flex items-center gap-2 bg-white text-black px-8 py-3 rounded-md font-bold hover:bg-white/80 transition">
-            <Play fill="black" size={22} /> Resume
-          </button>
-
-          <button className="flex items-center gap-2 bg-gray-500/60 text-white px-8 py-3 rounded-md font-bold hover:bg-gray-500/40 transition backdrop-blur-md">
-            <Info size={22} /> About Me
-          </button>
+      <div className="absolute inset-0 bg-linear-to-t from-[#141414] via-[#141414]/60 to-transparent" />
+      <div className="absolute inset-0 bg-linear-to-r from-[#141414] via-transparent to-transparent" />
+      <div className="relative h-full flex flex-col justify-end pb-16 px-6 md:px-14">
+        <div className="w-full max-w-2xl space-y-4">
+          <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white drop-shadow-lg">
+            {hero.title}
+          </h1>
+          <div className="flex flex-wrap items-center gap-3 text-white font-semibold drop-shadow-md">
+            <span className="text-[#46d369]">{hero.match}</span>
+            <span>{hero.year}</span>
+            <span className="border px-1 text-sm">{hero.rating}</span>
+            <span>{hero.duration}</span>
+          </div>
+          <p className="text-gray-200 text-sm md:text-base leading-relaxed drop-shadow-md">
+            {hero.description}
+          </p>
+          <div className="flex flex-wrap gap-3 pt-1">
+            <button className="flex items-center gap-2 bg-white text-black px-8 py-3 rounded-md font-bold hover:bg-white/80 transition">
+              <Play fill="black" size={22} /> Resume
+            </button>
+            <button className="flex items-center gap-2 bg-gray-500/60 text-white px-8 py-3 rounded-md font-bold hover:bg-gray-500/40 transition backdrop-blur-md">
+              <Info size={22} /> About Me
+            </button>
+          </div>
         </div>
       </div>
     </header>

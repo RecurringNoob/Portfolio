@@ -33,7 +33,7 @@ export default function BrowsePage() {
       {/* No mt-16 needed now */}
       <Billboard hero={profile.hero} />
 
-      <main className="-mt-32 relative z-10">
+      <main className="-mt-16 relative z-10">
         {profile.sections.map((section, idx) => (
           <Row
             key={idx}

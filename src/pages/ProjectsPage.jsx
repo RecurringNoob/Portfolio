@@ -4,7 +4,7 @@ import { AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Search, Filter, X, ExternalLink } from 'lucide-react';
 import { useProfile } from '../contexts/useProfile.js';
 import { MyListButton } from './MyListPage.jsx';
-
+import { motion } from 'framer-motion';
 const CATEGORY_ALL = 'All';
 
 export default function ProjectsPage() {

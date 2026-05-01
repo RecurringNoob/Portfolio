@@ -50,6 +50,7 @@ A Netflix-inspired developer portfolio where each "profile" (Personal, Fullstack
 | Icons | Lucide React |
 | State | React Context API |
 | Persistence | `localStorage` (selected profile, My List) |
+| Chat backend | REST API hosted on Render (cold-start aware) |
 
 ---
 
@@ -67,8 +68,11 @@ src/
 ├── data/
 │   └── profiles.js             # ⭐ Single source of truth for ALL content
 │
+├── service/
+│   └── chatService.js          # Chat API client — pingServer(), sendChatMessage()
+│
 ├── pages/
-│   ├── ProfileSelectionPage.jsx  # "Who's watching?" screen
+│   ├── ProfileSelectionPage.jsx  # "Who's watching?" screen — fires server wake-up ping
 │   ├── BrowsePage.jsx            # Main browsing page (billboard + rows)
 │   ├── ProjectPage.jsx           # Full-screen project detail page
 │   ├── ProjectsPage.jsx          # All-projects grid with search + category filter
@@ -80,7 +84,7 @@ src/
     │   ├── Billboard.jsx         # Hero header on BrowsePage
     │   └── Row.jsx               # Horizontal scrolling project row
     ├── layout/
-    │   └── Navbar.jsx            # Top navigation bar
+    │   └── Navbar.jsx            # Top navigation bar (mobile drawer + inline search)
     ├── Terminal.jsx              # Full-screen CLI terminal overlay
     ├── Chatbot.jsx               # Floating chat assistant (bottom-right)
     ├── ProjectModal.jsx          # Quick-view modal (from Row click)
@@ -88,7 +92,7 @@ src/
     └── ProfileSelection.jsx      # Alternative profile selection component (not currently routed)
 ```
 
-> **Note**: `ProjectDetails.jsx` and `ProfileSelection.jsx` are earlier versions that are not currently used in the active routing. The live app uses `ProjectPage.jsx` and `ProfileSelectionPage.jsx` instead.
+> **Note**: `ProjectDetails.jsx` and `ProfileSelection.jsx` are earlier versions not used in active routing. The live app uses `ProjectPage.jsx` and `ProfileSelectionPage.jsx` instead.
 
 ---
 
@@ -114,6 +118,22 @@ This file is imported by:
 - `ProfileSelectionPage.jsx` — to render the profile icons
 - `ProfileSelection.jsx` (legacy, unused in routing)
 
+### `src/service/chatService.js`
+
+Handles all communication with the chat backend. Two named exports:
+
+**`pingServer()`** — fires a fire-and-forget `GET /health` to wake the Render server. Errors are intentionally swallowed. Called once on `ProfileSelectionPage` mount so the server has maximum warm-up time before the user reaches the chat widget.
+
+**`sendChatMessage(message)`** — posts to `POST /chat`. Returns a structured result object and never throws:
+
+| Result shape | Meaning |
+|---|---|
+| `{ ok: true, reply: string }` | Success — display the reply |
+| `{ ok: false, coldStart: true }` | HTTP 503 — server still booting, trigger retry loop |
+| `{ ok: false, coldStart: false, error: string }` | Other failure — display error message |
+
+Persists `sessionId` at module level across calls so multi-turn conversation context is maintained without React state.
+
 ---
 
 ## 5. State Management
@@ -137,7 +157,7 @@ A React Context that holds the currently selected profile. Wraps the entire app 
 
 ### `useMyList` hook (`src/pages/MyListPage.jsx`)
 
-A lightweight custom hook exported from `MyListPage.jsx` that manages the user's saved/bookmarked project IDs in `localStorage`.
+A custom hook that manages bookmarked project IDs in `localStorage` using a **module-level singleton store** (`_list`, `_listeners`, `_save`, `_notify`). All `useMyList()` instances across the app share the same list and re-render together when it changes — no extra Context needed.
 
 **localStorage key**: `portfolio_my_list`
 
@@ -151,7 +171,7 @@ A lightweight custom hook exported from `MyListPage.jsx` that manages the user's
 | `toggle(id)` | `function` | Adds if not present, removes if present |
 | `has(id)` | `function` | Returns `true` if project ID is in the list |
 
-**`MyListButton` component** (also exported from `MyListPage.jsx`): a drop-in `+` / `✓` toggle button that can be placed on any project card. Accepts a `projectId` prop and an optional `size` prop (default `20`).
+**`MyListButton` component** (also exported from `MyListPage.jsx`): a drop-in `+` / `✓` toggle button for any project card. Accepts `projectId` and optional `size` (default `20`) props. Uses `e.stopPropagation()` so clicking never triggers card navigation. Already wired into `ProjectsPage`, `MyListPage`, and `ProjectModal`.
 
 ---
 
@@ -169,7 +189,7 @@ Defined in `App.jsx`. Uses React Router v6 `<Routes>` / `<Route>`.
 | `/my-list` | `MyListPage` | Requires profile selected |
 | `*` (catch-all) | Redirect | → `/select-profile` if no profile, otherwise → `/browse` |
 
-**Auth guard pattern**: If `profile` is `null` (no profile selected), any unknown route redirects to `/select-profile`. Once a profile is selected, the root `/` redirects to `/browse`.
+**Auth guard pattern**: If `profile` is `null`, any unknown route redirects to `/select-profile`. Once a profile is selected, the root `/` redirects to `/browse`.
 
 ---
 
@@ -179,10 +199,11 @@ Defined in `App.jsx`. Uses React Router v6 `<Routes>` / `<Route>`.
 
 The "Who's watching?" screen. Displays three profile cards (Personal, Fullstack, AI/ML) as large coloured icon tiles.
 
-- Clicking a tile calls `selectProfile(key)` from context, then navigates to `/browse`
-- "Manage Profiles" button calls `logout()` and reloads the page
-- Profiles are hardcoded locally in this file (not imported from `profiles.js`) with icon mappings: `personal → User`, `fullstack → Code`, `aiml → Brain`
-- Uses Framer Motion for entrance animation and hover/tap scaling
+- **Fires `pingServer()` on mount** — the earliest point in the user journey, giving the Render backend 30–60 seconds to boot before the user reaches the chat widget
+- Clicking a tile calls `selectProfile(key)` then navigates to `/browse`
+- "Manage Profiles" calls `logout()` then navigates to `/select-profile`
+- Icon mappings: `personal → User`, `fullstack → Code`, `aiml → Brain`
+- Framer Motion entrance animation and hover/tap scaling
 
 ---
 
@@ -197,72 +218,39 @@ The main content browsing screen. Composed of:
 5. `<main>` — maps over `profile.sections`, rendering a `<Row>` for each
 6. `<ProjectModal>` — rendered when `selectedProject` state is non-null
 
-**Key state:**
-- `selectedProject` — the project object currently shown in the modal (or `null`)
-- `isTerminalOpen` — boolean controlling Terminal visibility
+**Key state:** `selectedProject` (modal), `isTerminalOpen` (terminal overlay)
 
 **Keyboard shortcut**: `Ctrl + `` ` `` ` toggles the terminal.
-
-Row clicks call `setSelectedProject(project)`, opening the modal. The modal's "Play" button navigates to `/project/:id`.
 
 ---
 
 ### `ProjectPage.jsx`
 
-Full-screen project detail page. Accessed via `/project/:id`.
+Full-screen project detail page at `/project/:id`.
 
-**Data flow:**
-1. Reads `:id` from URL params via `useParams()`
-2. Reads `profile` from context
-3. Searches `profile.sections[].projects` for a project with matching `id`
-4. Also finds `relatedProjects` — other projects in the same section
-
-**Layout sections:**
-- Fixed "Back to Browse" button (top-left)
-- Hero: full-bleed image with gradient overlays, title, metadata, action buttons (Live Demo, Source Code, Plus, ThumbsUp)
-- Content grid (2/3 + 1/3):
-  - Left: description + "Key Milestones" (features list, styled like Netflix episodes)
-  - Right: Tech Stack, Role, Difficulty, Tags
-- "More Like This" grid (up to 4 related projects)
-
-If the project is not found, renders a "not found" message with a back link.
+**Layout:** hero image, title, metadata, action buttons → content grid (description + milestones left, tech/role/difficulty/tags right) → "More Like This" grid.
 
 ---
 
-### `ProjectsPage.jsx` *(new)*
+### `ProjectsPage.jsx`
 
-A full grid view of all projects in the active profile. Accessed via `/projects`.
+All-projects grid at `/projects`.
 
-**Features:**
-- Live text search across title, description, and technologies
-- Category filter pills (derived dynamically from `project.category` values)
-- Animated grid using `AnimatePresence` + `motion.div` with staggered entrance
-- Empty state with "Clear filters" CTA
-- Each card shows thumbnail, title, year, category badge, tech stack on hover, and match badge
-- Clicking a card navigates to `/project/:id`
+- Reads `?search=` query param on load (set by Navbar search) — `search` is derived directly from `useSearchParams`, never mirrored in separate state
+- URL stays in sync as user types (shareable links)
+- Category filter pills, animated grid, `MyListButton` on each card (hover-reveal, top-right)
 
 ---
 
-### `NewPopularPage.jsx` *(new)*
+### `NewPopularPage.jsx`
 
-A ranked view of projects sorted by recency (`year` descending) then match score. Accessed via `/new-popular`.
-
-**Layout:**
-- Top 3 projects rendered as large spotlight cards with a large watermark rank number (1, 2, 3) and a "Top Rated" badge on #1
-- Remaining projects rendered as a compact ranked list (rank number, thumbnail, title, description snippet, match %, year)
-- Framer Motion entrance animations (cards slide up, list items slide in from left)
+Ranked project view at `/new-popular`. Sorted by `year` descending then match score. Top 3 as spotlight cards with watermark rank numbers; rest as a compact ranked list.
 
 ---
 
-### `MyListPage.jsx` *(new)*
+### `MyListPage.jsx`
 
-Displays projects the user has bookmarked. Accessed via `/my-list`. Persists via `localStorage` key `portfolio_my_list`.
-
-**Features:**
-- Grid of saved project cards with a hover-reveal "Remove" (`BookmarkX`) button
-- Empty state with a "Browse Projects" CTA
-- Animated card removal via `AnimatePresence` `layout` prop
-- Exports `useMyList` hook and `MyListButton` component for use elsewhere (see §5)
+Bookmarked projects at `/my-list`. Grid with hover-reveal `BookmarkX` remove button, animated removal, empty state CTA. Exports `useMyList` and `MyListButton`.
 
 ---
 
@@ -270,142 +258,83 @@ Displays projects the user has bookmarked. Accessed via `/my-list`. Persists via
 
 ### `Billboard.jsx` (`components/common/`)
 
-The hero banner at the top of `BrowsePage`.
+Hero banner at the top of `BrowsePage`.
 
-**Props:**
-- `hero` — object from `profile.hero` (see schema below)
+**Props:** `hero` — object from `profile.hero`
 
-Renders: full-bleed image, two gradient overlays (bottom-fade + left-fade), title, metadata row (match %, year, rating, duration), description, and two buttons ("Resume" and "About Me").
-
-> **Note**: The "Resume" and "About Me" buttons are currently non-functional placeholders.
+> **Note**: "Resume" and "About Me" buttons are currently non-functional placeholders.
 
 ---
 
 ### `Row.jsx` (`components/common/`)
 
-A horizontally scrollable row of project cards.
+Horizontally scrollable row of project cards.
 
-**Props:**
-- `title` — section heading string
-- `projects` — array of project objects
-- `onSelect` — optional callback; if provided, clicking a card calls `onSelect(project)` instead of navigating
+**Props:** `title`, `projects`, `onSelect` (optional callback)
 
-**Behaviour:**
-- Left/right chevron buttons appear on row hover (`group-hover/row`)
-- Clicking a card: if `onSelect` is provided → calls it (used by `BrowsePage` to open modal); otherwise → navigates to `/project/:id`
-- Card hover: Framer Motion `whileHover` scale 1.1 + image overlay with title
+Chevron buttons on hover, `whileHover` scale on cards.
 
 ---
 
 ### `Navbar.jsx` (`components/layout/`)
 
-Top navigation bar.
+**Props:** `profileColor`, `onTerminal`
 
-**Props:**
-- `profileColor` — CSS class string (e.g. `"bg-red-600"`) for the avatar circle
-- `onTerminal` — callback to toggle the Terminal overlay
+**Desktop behaviour:**
+- Transparent gradient → fixed opaque after 50px scroll
+- Nav links with animated active underline (`layoutId`)
+- Inline search expands to 220px; `Enter` → `/projects?search=<query>`
+- Bell with red pulse dot; Terminal icon with keyboard hint
+- Profile avatar → dropdown (Viewing as / Switch Profile / Sign Out)
 
-**Behaviour:**
-- Becomes fixed/opaque (with `backdrop-blur`) after scrolling past 50px; transparent gradient while at top
-- A spacer `<div>` (class `h-16`) prevents content jump when fixed
-- "PORTFOLIO" logo navigates to `/browse` with `whileHover` scale animation
-- **Nav links** (desktop): Home, Projects, New & Popular, My List — active link has a sliding `layoutId` underline via Framer Motion; non-active links show a hover underline via CSS scale transition
-- **Mobile**: Collapses links into a "Browse ›" label
-- **Inline search**: Clicking the Search icon expands an animated input field in place (width animates from 0 → 220px). `Enter` navigates to `/browse?search=<query>`. `Escape` or the `×` button closes it
-- **Bell icon**: Shows a red pulse dot (clears on click)
-- **Terminal icon**: Calls `onTerminal`; tooltip shows `Ctrl + \``
-- **Profile avatar**: Shows profile name label and `ChevronDown` caret on desktop hover; clicking opens a dropdown menu
-- **Profile dropdown** (click): "Viewing as [Profile Name]" header, "Switch Profile" (navigates to `/select-profile` without logging out), "Sign Out" (calls `logout()` + navigates to `/select-profile`); closes on outside click via `mousedown` listener; animated with `AnimatePresence`
-- Framer Motion `whileHover` / `whileTap` on all icon buttons
-
-> **Removed**: The "Kids" label that previously appeared between Bell and Terminal icons has been removed.
+**Mobile behaviour:**
+- `Menu` hamburger opens spring-animated slide-in drawer (`z-70`)
+- Drawer contains: logo, profile badge, search input, nav links with icons + active dot, footer actions (Terminal, Switch Profile, Sign Out)
+- Body scroll locks while drawer is open
+- Drawer closes on route change or `Escape`
+- Terminal icon hidden from main bar on mobile (accessible via drawer)
 
 ---
 
 ### `Terminal.jsx`
 
-A full-screen CLI terminal overlay. Two versions exist; the live one is imported into `BrowsePage`.
+Full-screen CLI overlay. `onClose` prop to dismiss.
 
-**Props:**
-- `onClose` — callback to close the terminal
-
-**Architecture:**
-- `history` state: array of `{ type: 'input' | 'output' | 'error', text: string }`
-- `input` state: current line being typed
-- `commands` object: maps command names to functions returning `string[]`
-- `customScripts` object: extensible script registry (`random`, `techstack` built in)
-- `executeSafeScript(fn, args)` — runs a custom script in a sandboxed object (no `window`, no `document`; only `Math`, `Date`, `JSON`, `console.log`, and a deep copy of `profiles`)
-
-**Available commands:**
-
-| Command | Description |
-|---|---|
-| `help` | Lists all commands + custom scripts |
-| `about` | Shows bio text |
-| `skills` | Lists all unique technologies across all profiles |
-| `projects` | Lists all projects across all profiles |
-| `project <id>` | Shows full detail for a specific project by ID |
-| `work` | Shows sections with "work" or "experience" in the title |
-| `education` | Shows sections with "education" in the title |
-| `resume` | Shows a structured summary of all profiles/sections |
-| `download` | Triggers download of `/resume.pdf` |
-| `contact` | Shows contact info |
-| `search <term>` | Full-text search across title, description, technologies, tags |
-| `stats` | Shows aggregate statistics (total projects, technologies, etc.) |
-| `clear` | Clears the terminal history |
-| `gui` | Calls `onClose()` to return to GUI mode |
-| `random` | (custom script) Shows a random project |
-| `techstack` | (custom script) Shows top 10 technologies by frequency |
-
-**Keyboard**: `Enter` submits, auto-scrolls to bottom after each command, input auto-focuses on mount.
+**Available commands:** `help`, `about`, `skills`, `projects`, `project <id>`, `work`, `education`, `resume`, `download`, `contact`, `search <term>`, `stats`, `clear`, `gui`, `random` (script), `techstack` (script).
 
 ---
 
 ### `Chatbot.jsx`
 
-A floating chat assistant, fixed to the bottom-right corner.
+Floating chat assistant (bottom-right).
 
-**State:**
-- `isOpen` — boolean, toggles the chat window
-- `messages` — array of `{ text, sender: 'user' | 'bot' }`
-- `input` — current user input
+**State:** `isOpen`, `messages`, `input`, `isTyping`, `serverState` (`'idle' | 'warming'`)
 
-**Response logic** (`getBotReply`): keyword-matching against the user message:
-- `"project"` → lists project titles from active profile
-- `"skill"` / `"tech"` → lists unique technologies from active profile
-- `"contact"` / `"email"` → returns hardcoded contact info placeholder
-- `"about"` → returns bio blurb
-- Default → generic fallback message
+**Cold-start flow:**
+1. User sends a message → `attemptSend(msg, false, deps)` called
+2. If response is `{ ok: false, coldStart: true }` (HTTP 503): `serverState` → `'warming'`, amber status bubble shown, `setInterval` retries every 5 s
+3. On success: interval cleared, reply posted, `serverState` → `'idle'`
+4. Input, chips, and send button disabled during `'warming'`; header dot turns yellow with spinning loader
 
-> **Note**: Contact info is currently a placeholder (`your.email@example.com`). Update `getBotReply` to use real data from `profiles.js` or a separate config.
+**Architecture:** `attemptSend` is a **plain module-level `async` function** (not a hook, not inside the component). It receives all setters and refs via a `deps` argument. This avoids stale closures, ref-during-render violations, and `useCallback` hoisting issues — the `setInterval` callback calls it with the same `deps` object directly.
+
+> `pingServer()` lives in `ProfileSelectionPage.jsx`, not here. See §7.
 
 ---
 
 ### `ProjectModal.jsx`
 
-A quick-view modal triggered by clicking a project card in a `Row`.
+Quick-view modal from Row card clicks.
 
-**Props:**
-- `project` — project object or `null`
-- `onClose` — callback to clear selection
+**Props:** `project`, `onClose`
 
-**Behaviour:**
-- Uses `AnimatePresence` + `motion.div` for fade/scale in-out animation
-- Clicking the backdrop overlay calls `onClose`
-- "Play" button navigates to `/project/:id` and calls `onClose`
-- Shows: image hero, title, match/year/rating, description, tech stack, category, role
+Shows hero image, metadata, description, tech stack, role. Action row: "View Project" button, `MyListButton`, ThumbsUp (cosmetic).
 
 ---
 
-### `ProjectDetails.jsx` (legacy, not currently routed)
+### `ProjectDetails.jsx` / `ProfileSelection.jsx` (legacy, not routed)
 
-An earlier version of the project detail view designed to be used as a component (not a page). Accepts `project`, `onBack`, `relatedProjects`, and `onProjectSelect` as props. Functionality is now superseded by `ProjectPage.jsx`.
-
----
-
-### `ProfileSelection.jsx` (legacy, not currently routed)
-
-An earlier version of the profile selection screen used as a component. Superseded by `ProfileSelectionPage.jsx`.
+Superseded by `ProjectPage.jsx` and `ProfileSelectionPage.jsx` respectively.
 
 ---
 
@@ -416,62 +345,51 @@ Full schema for `src/data/profiles.js`:
 ```json
 {
   "personal": {
-    "name": "string — display name for the profile",
-    "icon": "string — icon identifier (optional, used in legacy component)",
+    "name": "string",
+    "icon": "string (optional)",
     "color": "string — Tailwind bg class, e.g. 'bg-blue-600'",
     "hero": {
-      "title": "string — billboard headline",
-      "description": "string — billboard subtitle / tagline",
-      "image": "string — URL to hero image",
+      "title": "string",
+      "description": "string",
+      "image": "string — URL",
       "match": "string — e.g. '97% Match'",
       "year": "string — e.g. '2024'",
-      "rating": "string — e.g. 'HD' or 'PG-13'",
+      "rating": "string — e.g. 'HD'",
       "duration": "string — e.g. '5 yrs exp'"
     },
     "sections": [
       {
-        "title": "string — section heading shown in Row",
+        "title": "string",
         "projects": [
           {
-            "id": "string — unique across ALL profiles, used in URL /project/:id",
-            "title": "string — project name",
-            "description": "string — full description",
-            "category": "string — e.g. 'Web App', 'AI/ML', 'Mobile'",
-            "image": "string — URL to project thumbnail/hero image",
+            "id": "string — globally unique, used in /project/:id",
+            "title": "string",
+            "description": "string",
+            "category": "string — e.g. 'Web App'",
+            "image": "string — URL",
             "technologies": ["string"],
-            "match": "string — e.g. '98% Match'",
-            "year": "string — e.g. '2023'",
-            "rating": "string — e.g. 'HD'",
-            "duration": "string — e.g. '3 months'",
-            "role": "string — e.g. 'Lead Developer'",
-            "difficulty": "string — e.g. 'Advanced'",
+            "match": "string",
+            "year": "string",
+            "rating": "string",
+            "duration": "string",
+            "role": "string",
+            "difficulty": "string",
             "tags": ["string"],
-            "links": {
-              "demo": "string — URL to live demo",
-              "code": "string — URL to source code / GitHub"
-            },
+            "links": { "demo": "string", "code": "string" },
             "features": [
-              {
-                "title": "string — milestone/feature name",
-                "duration": "string — e.g. 'Week 1-2'",
-                "desc": "string — description of this milestone"
-              }
+              { "title": "string", "duration": "string", "desc": "string" }
             ]
           }
         ]
       }
     ]
   },
-  "fullstack": { "...same structure as personal..." },
-  "aiml": { "...same structure as personal..." }
+  "fullstack": { "...same structure..." },
+  "aiml": { "...same structure..." }
 }
 ```
 
-**Important rules:**
-- `id` must be **globally unique** across all profiles and sections. Convention: `p-work-1`, `fs-ecommerce-2`, `ai-nlp-3`, etc.
-- `color` must be a valid Tailwind background utility class (e.g. `bg-red-600`).
-- `features` is optional. If omitted or empty, the "Key Milestones" section is hidden in `ProjectPage`.
-- `links.demo` and `links.code` default to `"#"` if not provided (handled in `ProjectPage`).
+**Rules:** `id` globally unique (convention: `p-work-1`, `fs-ecommerce-2`, `ai-nlp-3`). `color` must be a valid Tailwind bg class. `features` is optional. `links` default to `"#"` if omitted.
 
 ---
 
@@ -486,110 +404,124 @@ Full schema for `src/data/profiles.js`:
 | Surface-2 | `#2f2f2f` | Related project cards |
 | Surface-3 | `#333` | Hover state for feature rows |
 | Accent Red | `#E50914` | Logo, selection highlight, notification dot |
-| Accent Green | `#46d369` | Match percentage, terminal prompt |
+| Accent Green | `#46d369` | Match %, terminal prompt, chatbot online dot |
 | Accent Emerald | `emerald-400` | Navbar icons |
+| Accent Yellow | `yellow-400` | Chatbot warming/cold-start state |
 | Border | `#404040` | Section dividers |
 
 ### Typography
 
-- All text: `font-sans` (system sans-serif via Tailwind)
+- All text: `font-sans`
 - Terminal: `font-mono`
 - Hero titles: `font-black tracking-tighter uppercase`
 - Section headings: `text-xl font-bold`
 
-### Spacing conventions
+### Tailwind v4 class conventions
 
-- Page horizontal padding: `px-4 md:px-12` (mobile → desktop)
+Always use canonical Tailwind v4 names:
+
+| ❌ Avoid | ✅ Use |
+|---|---|
+| `bg-gradient-to-b` | `bg-linear-to-b` |
+| `h-[2px]` | `h-0.5` |
+| `border-white/[0.08]` | `border-white/8` |
+| `z-[60]` | `z-60` |
+
+### Spacing
+
+- Page horizontal padding: `px-4 md:px-12`
 - Row vertical margin: `my-10`
-- Billboard overlap: `BrowsePage` uses `-mt-32 relative z-10` on `<main>` to overlap the billboard
+- Billboard overlap: `-mt-32 relative z-10` on `<main>`
 
 ### Z-index layers
 
 | Layer | z-index | Element |
 |---|---|---|
 | Page content | default | Billboard, Rows |
-| Navbar | `z-50` | Navbar (when fixed) |
-| Row cards hover | `z-50` (via `hover:z-50`) | Card on hover |
+| Navbar | `z-50` | Fixed navbar |
+| Row cards hover | `z-50` | Card on hover |
 | Project Modal | `z-[200]` | Modal overlay |
-| Terminal | `z-50` | Terminal overlay (full-screen) |
-| Chatbot | `z-40` / `z-50` | Floating button / chat window |
+| Terminal | `z-50` | Full-screen overlay |
+| Chatbot launcher | `z-40` | Floating button |
+| Chatbot panel | `z-50` | Chat window |
+| Mobile drawer backdrop | `z-60` | Dark overlay |
+| Mobile drawer panel | `z-70` | Slide-in nav panel |
 
 ---
 
 ## 11. Features & Interactions
 
 ### Profile persistence
-Selected profile is saved to `localStorage` under key `selectedProfile`. On app load, `ProfileContext` restores it automatically, bypassing the selection screen.
+Saved to `localStorage` key `selectedProfile`. Restored on mount by `ProfileContext`.
 
 ### My List persistence
-Bookmarked project IDs are saved to `localStorage` under key `portfolio_my_list`. Managed via the `useMyList` hook exported from `MyListPage.jsx`. The `MyListButton` component can be dropped onto any project card.
+Saved to `localStorage` key `portfolio_my_list`. Managed by `useMyList` singleton. `MyListButton` is wired into `ProjectsPage` cards, `ProjectModal`, and `MyListPage`.
 
-### Terminal shortcut
-`Ctrl + `` ` `` ` toggles the terminal from anywhere on `BrowsePage`.
+### Server wake-up (cold-start mitigation)
+`pingServer()` fires on `ProfileSelectionPage` mount — the earliest point in the journey. Gives the Render backend up to 60 seconds of warm-up before the user opens chat.
+
+### Chat cold-start retry loop
+HTTP 503 from `/chat` → `serverState = 'warming'` → amber status bubble → 5-second retry loop via `setInterval` → on 200 OK, clear timer, post reply, `serverState = 'idle'`.
 
 ### Navbar inline search
-Clicking the Search icon in the Navbar expands an animated inline input. Pressing `Enter` navigates to `/browse?search=<query>`. Pressing `Escape` or the `×` button collapses it.
+`Enter` in the expanded search input navigates to `/projects?search=<query>`. `ProjectsPage` reads the param and pre-filters the grid. Works from both desktop inline search and mobile drawer search.
+
+### Mobile navigation
+`Menu` hamburger (visible `< lg`) opens a spring-animated drawer. Full nav links, search, and account actions available. Body scroll locked while open.
+
+### Terminal shortcut
+`Ctrl + `` ` `` ` toggles terminal on `BrowsePage`.
 
 ### Row scrolling
-Left/right arrow buttons appear on row hover and scroll by one viewport width. Overflow is hidden with `scrollbar-hide` (custom Tailwind utility).
+Chevron buttons on hover, `scrollbar-hide` overflow.
 
 ### Project navigation flow
+
 ```
-BrowsePage (Row card click)
-  → ProjectModal (quick view)
-    → "Play" button → /project/:id (ProjectPage)
-      → "Back to Browse" → /browse
+ProfileSelectionPage
+  → /browse (BrowsePage)
+      Row card → ProjectModal (MyListButton available)
+        "View Project" → /project/:id (ProjectPage)
+          "Back to Browse" → /browse
 
-/projects (ProjectsPage)
-  → card click → /project/:id (ProjectPage)
-
-/new-popular (NewPopularPage)
-  → card / row click → /project/:id (ProjectPage)
-
-/my-list (MyListPage)
-  → card click → /project/:id (ProjectPage)
+/projects  → card → /project/:id
+/new-popular → card → /project/:id
+/my-list → card → /project/:id
 ```
-
-### Mute toggle
-`ProjectPage` has a mute/unmute button (VolumeX / Volume2 icon). Currently cosmetic — no actual video/audio is wired up.
 
 ---
 
 ## 12. Extension Points
 
 ### Adding a new profile
-1. Add a new key to `src/data/profiles.js` following the schema in §9.
-2. Add the profile to the local `profiles` object in `ProfileSelectionPage.jsx` with its icon mapping.
-3. If needed, add icon to `ProfileSelection.jsx` (legacy component).
+1. Add key to `src/data/profiles.js` (see §9 schema)
+2. Add entry to `profiles` object in `ProfileSelectionPage.jsx` with icon mapping
+3. Add filter/nav option if needed
 
 ### Adding a new terminal command
-In `Terminal.jsx`, add a new key to the `commands` object:
 ```js
-mycommand: (args) => {
-  return ['Line 1 of output', 'Line 2 of output'];
-}
+// In Terminal.jsx, commands object:
+mycommand: (args) => ['Line 1', 'Line 2']
 ```
 
 ### Adding a new custom script
-Add to the `customScripts` object in `Terminal.jsx`. The function receives a `sandbox` object with `profiles`, `Math`, `Date`, `JSON`, `console`, and `args`.
+Add to `customScripts` in `Terminal.jsx`. Receives `sandbox` with `profiles`, `Math`, `Date`, `JSON`, `console`, `args`.
 
-### Upgrading the Chatbot to use AI
-Replace `getBotReply` in `Chatbot.jsx` with a call to the Anthropic API (or any LLM). Pass `profile` from context as part of the system prompt so the bot has full knowledge of the current profile's projects.
+### Changing chat AI model or system prompt
+Update the backend — `chatService.js` is model-agnostic. To adjust retry timing, change `RETRY_INTERVAL_MS` in `Chatbot.jsx`.
 
-### Wiring up the Billboard buttons
-In `Billboard.jsx`, the "Resume" and "About Me" buttons are inert. Connect them to:
-- "Resume" → `links.resume` in the hero object, or trigger a PDF download
-- "About Me" → a dedicated `/about` route or a modal
+### Wiring up Billboard buttons
+- "Resume" → `links.resume` in the hero object or trigger PDF download
+- "About Me" → `/about` route or modal
 
-### Adding `MyListButton` to project cards
-Import `MyListButton` from `pages/MyListPage.jsx` and drop it into any card component:
+### Adding `MyListButton` to a new component
 ```jsx
 import { MyListButton } from '../pages/MyListPage.jsx';
-// Inside a card:
 <MyListButton projectId={project.id} size={20} />
 ```
+No props wiring needed — the singleton hook handles state automatically.
 
 ### Adding a new page
-1. Create the page in `src/pages/`.
-2. Add a `<Route>` in `App.jsx` (wrap with auth guard if needed).
-3. Add a nav link entry to the `navLinks` array in `Navbar.jsx`.
+1. Create in `src/pages/`
+2. Add `<Route>` in `App.jsx` (auth-guard if profile-scoped)
+3. Add entry to `navLinks` array in `Navbar.jsx` with `label`, `path`, `icon`
