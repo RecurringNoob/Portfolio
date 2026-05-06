@@ -7,6 +7,7 @@ import ProjectsPage   from './pages/ProjectsPage.jsx';
 import NewPopularPage from './pages/NewPopularPage.jsx';
 import MyListPage     from './pages/MyListPage.jsx';
 import Terminal from './pages/Terminal.jsx';
+import PortfolioPage from './pages/PortfolioPage.jsx';
 function App() {
   const { profile } = useProfile();
 
@@ -25,7 +26,8 @@ function App() {
           <Route path="/project/:id" element={<ProjectPage />} />
            <Route path="/projects"    element={<ProjectsPage />}   />
           <Route path="/new-popular" element={<NewPopularPage />} />
-           <Route path="/my-list"     element={<MyListPage />}     />        
+           <Route path="/my-list"     element={<MyListPage />}     />   
+           <Route path='/portfolio' element = {<PortfolioPage/>} />     
         </>
       )}
       

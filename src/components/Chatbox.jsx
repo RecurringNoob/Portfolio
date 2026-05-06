@@ -134,6 +134,7 @@ export default function Chatbot() {
             Need help exploring the portfolio?
           </div>
           <button
+            
             onClick={() => setIsOpen(true)}
             className="relative w-14 h-14 bg-red-600 hover:bg-red-700 text-white rounded-full flex items-center justify-center shadow-lg transition"
           >
