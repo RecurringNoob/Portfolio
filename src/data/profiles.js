@@ -351,7 +351,7 @@ const allProjects = {
       "Production-ready WebRTC communication platform with P2P video calling, random peer matching, synchronised watch parties, and real-time chat. Architected with Redux Toolkit for deterministic lifecycle management, Socket.IO for WebRTC signalling, and a clean separation between media state and UI state. Supports mid-call device switching, screen sharing, and host-controlled synchronised media playback with sub-second drift correction.",
     category: "Real-Time Systems",
     image:
-      "https://images.unsplash.com/photo-1587825140708-dfaf72ae4b04?w=800&q=80",
+      "https://i.postimg.cc/B6TrK0HK/Screenshot-2026-05-07-181434.jpg",
     technologies: [
       "React", "WebRTC", "Socket.IO", "Redux Toolkit", "Node.js", "Express",
     ],
@@ -481,7 +481,7 @@ const allProjects = {
       "Developer tooling for hardware engineers: a semantic diff engine for KiCad .kicad_pcb files (FluxDiff) paired with a RAG-powered chat layer (FluxLink Chat). Review board changes in an interactive viewer with findings markers, then query the entire git history in natural language — every answer cited to a specific commit ID and file.",
     category: "Developer Tools / RAG",
     image:
-      "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&q=80",
+      "https://i.postimg.cc/44vLvPMN/Screenshot-2026-04-23-163041.jpg",
     technologies: [
       "Python", "FastAPI", "Flask", "React", "Vite",
       "OpenAI", "FAISS", "OpenCV", "CairoSVG", "KiCad CLI",
@@ -554,7 +554,7 @@ const allProjects = {
       "Dark-themed, Krea.ai-inspired node-based canvas for building and running AI pipelines without code. Users drag LLM, media-processing, and output nodes onto a React Flow canvas, wire them with type-validated edges, and execute the DAG asynchronously via Trigger.dev workers — with real-time status polling, run history, and a full workflow dashboard.",
     category: "AI-Powered Tools",
     image:
-      "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=800&q=80",
+      "https://i.postimg.cc/mkJXhpk7/Screenshot-2026-05-05-195143.jpg",
     technologies: [
       "Next.js 16", "TypeScript", "React Flow", "Zustand",
       "Clerk", "Neon PostgreSQL", "Prisma",
@@ -1005,7 +1005,7 @@ const allProjects = {
       "End-to-end ML system for industrial machine health monitoring — from ESP32 sensor hardware through a FastAPI backend to a live React dashboard. An IoT poller collects temperature, RPM, torque, and tool-wear readings from ThingSpeak every 15 seconds, feeds them into a trained scikit-learn Random Forest classifier, and streams predictions to the frontend via Server-Sent Events with sub-5-second latency. Classifies six failure modes in real time.",
     category: "Predictive Analytics & IoT",
     image:
-      "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&q=80",
+      "https://i.postimg.cc/Kj50ZcLq/Screenshot-2026-05-05-182809.jpg",
     technologies: [
       "Python", "FastAPI", "scikit-learn", "Random Forest",
       "PostgreSQL", "TimescaleDB", "React", "TypeScript",

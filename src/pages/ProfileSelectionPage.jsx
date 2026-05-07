@@ -12,7 +12,6 @@ const profiles = {
   aiml:      { name: 'AI/ML',      color: 'bg-purple-600',  icon: Brain },
 };
 
-// Subtitle hints shown beneath each profile name — helps visitors pick quickly
 const subtitles = {
   portfolio: 'CV & overview',
   personal:  'Journey & story',
@@ -30,7 +29,9 @@ export default function ProfileSelectionPage() {
 
   const handleSelect = (key) => {
     selectProfile(key);
-    navigate('/browse');
+    // Portfolio profile → dedicated single-page CV view
+    // All other profiles → Netflix-style browse experience
+    navigate(key === 'portfolio' ? '/portfolio' : '/browse');
   };
 
   const handleManageProfiles = () => {
